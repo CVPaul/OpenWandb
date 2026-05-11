@@ -4,6 +4,9 @@ data/
 # wandb SDK local cache
 wandb/
 
+# MNIST dataset cache
+data_mnist/
+
 # Python
 __pycache__/
 *.py[cod]

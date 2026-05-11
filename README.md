@@ -105,13 +105,36 @@ wandb.init(project="my-project", entity="my-team")
 
 ## 运行示例
 
+### 快速演示 (模拟数据, 无需 GPU)
+
 ```bash
 # 终端 1: 启动服务器
 python run_server.py
 
-# 终端 2: 运行示例训练
+# 终端 2: 运行模拟训练
 python example_train.py
 ```
+
+### MLP 真实训练 (MNIST 手写数字识别)
+
+一个完整的 PyTorch 训练脚本，用 MLP 识别手写数字，全程用 wandb 记录：
+
+```bash
+# 安装 PyTorch (如果还没有)
+pip install torch torchvision
+
+# 终端 1: 启动服务器
+python run_server.py
+
+# 终端 2: 运行训练 (默认参数)
+python example_mlp.py
+
+# 修改超参数再跑一次, 然后在 Web UI 中对比两次实验!
+python example_mlp.py --lr 0.01 --hidden 128 --optimizer sgd --epochs 10
+```
+
+脚本会自动下载 MNIST 数据集、训练模型、并将所有指标上传到 OpenWandb。
+打开 `http://localhost:8080` → 进入 `mnist-mlp` 项目 → 查看曲线图、对比不同实验。
 
 ## Web 仪表盘
 
