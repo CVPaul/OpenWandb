@@ -28,7 +28,7 @@ from openwandb import file_stream
 from openwandb import storage
 from openwandb.config import (HOST, PORT, DEFAULT_TEAM_NAME, ALLOW_REGISTRATION,
                               DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD,
-                              TEMPLATES_DIR, STATIC_DIR)
+                              TEMPLATES_DIR, STATIC_DIR, ROOT_PATH)
 from openwandb.graphql_schema import schema
 
 # ─────────────────────────────────────────────
@@ -47,12 +47,20 @@ logger = logging.getLogger("openwandb")
 app = FastAPI(
     title="OpenWandb",
     description="开源 WandB 兼容服务器 — 多租户版",
-    version="0.3.0"
+    version="0.3.1",
 )
 
 # 静态文件与模板 (从包内资源路径加载)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+def _tpl(request: Request, template_name: str, context: dict = None) -> templates.TemplateResponse:
+    """渲染模板, 自动注入 base_path (反向代理路径前缀)"""
+    ctx = context or {}
+    ctx["request"] = request
+    ctx["base_path"] = ROOT_PATH  # 模板中所有 URL 都要加这个前缀
+    return templates.TemplateResponse(request, template_name, ctx)
 
 
 # ─────────────────────────────────────────────
@@ -609,8 +617,8 @@ async def login_page(request: Request):
     """登录/注册页"""
     user = auth.get_optional_user(request)
     if user:
-        return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse(request, "login.html", context={
+        return RedirectResponse(url=f"{ROOT_PATH}/", status_code=302)
+    return _tpl(request, "login.html", {
         "allow_registration": ALLOW_REGISTRATION,
     })
 
@@ -620,10 +628,10 @@ async def settings_page(request: Request):
     """用户设置页"""
     user = auth.get_current_user(request)
     if not user:
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
     api_keys = db.list_api_keys(user["id"])
     teams = db.list_teams_for_user(user["id"])
-    return templates.TemplateResponse(request, "settings.html", context={
+    return _tpl(request, "settings.html", {
         "user": user,
         "api_keys": api_keys,
         "teams": teams,
@@ -635,7 +643,7 @@ async def team_page(request: Request, team_name: str):
     """团队管理页"""
     user = auth.get_current_user(request)
     if not user:
-        return RedirectResponse(url="/login", status_code=302)
+        return RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
 
     team = db.get_team_by_name(team_name)
     if not team:
@@ -650,7 +658,7 @@ async def team_page(request: Request, team_name: str):
     for p in projects:
         p["run_count"] = db.get_project_run_count(p["id"])
 
-    return templates.TemplateResponse(request, "team.html", context={
+    return _tpl(request, "team.html", {
         "user": user,
         "team": team,
         "my_role": role,
@@ -682,7 +690,7 @@ async def dashboard(request: Request):
         team_obj = db.get_team_by_id(p["team_id"]) if p.get("team_id") else None
         p["entity"] = team_obj["name"] if team_obj else DEFAULT_TEAM_NAME
 
-    return templates.TemplateResponse(request, "index.html", context={
+    return _tpl(request, "index.html", {
         "user": user,
         "teams": teams,
         "projects": projects,
@@ -701,7 +709,7 @@ async def project_page(request: Request, entity: str, project_name: str):
     # 权限校验
     if project["visibility"] != "public":
         if not user:
-            return RedirectResponse(url="/login", status_code=302)
+            return RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
         if not db.user_can_access_project(user["id"], project["id"]):
             # 检查分享链接
             if not auth.check_share_access(request, "project", project["id"]):
@@ -717,7 +725,7 @@ async def project_page(request: Request, entity: str, project_name: str):
     # 检查用户是否有写权限 (决定是否显示分享/设置按钮)
     can_write = user and db.user_can_write_project(user["id"], project["id"]) if user else False
 
-    return templates.TemplateResponse(request, "project.html", context={
+    return _tpl(request, "project.html", {
         "user": user,
         "project": project,
         "runs": runs,
@@ -738,7 +746,7 @@ async def run_page(request: Request, entity: str, project_name: str, run_id: str
     project = db.get_project_by_id(run["project_id"])
     if project and project["visibility"] != "public":
         if not user:
-            return RedirectResponse(url="/login", status_code=302)
+            return RedirectResponse(url=f"{ROOT_PATH}/login", status_code=302)
         if not db.user_can_access_project(user["id"], project["id"]):
             if not auth.check_share_access(request, "run", run["id"]):
                 raise HTTPException(status_code=403, detail="Access denied")
@@ -748,7 +756,7 @@ async def run_page(request: Request, entity: str, project_name: str, run_id: str
     run["tags"] = json.loads(run.get("tags_json", "[]"))
     metric_keys = db.get_metric_keys(run_id)
 
-    return templates.TemplateResponse(request, "run.html", context={
+    return _tpl(request, "run.html", {
         "user": user,
         "run": run,
         "entity": entity,
@@ -773,7 +781,7 @@ async def compare_page(request: Request, entity: str, project_name: str,
         r["tags"] = json.loads(r.get("tags_json", "[]"))
     selected_ids = runs.split(",") if runs else []
 
-    return templates.TemplateResponse(request, "compare.html", context={
+    return _tpl(request, "compare.html", {
         "user": user,
         "project": project,
         "runs": all_runs,
@@ -796,7 +804,7 @@ async def share_page(request: Request, token: str):
             team = db.get_team_by_id(proj["team_id"])
             entity = team["name"] if team else DEFAULT_TEAM_NAME
             return RedirectResponse(
-                url=f"/projects/{entity}/{proj['name']}?share_token={token}",
+                url=f"{ROOT_PATH}/projects/{entity}/{proj['name']}?share_token={token}",
                 status_code=302
             )
     elif link["resource_type"] == "run":
@@ -810,7 +818,7 @@ async def share_page(request: Request, token: str):
                 team = db.get_team_by_id(proj["team_id"])
                 entity = team["name"] if team else DEFAULT_TEAM_NAME
                 return RedirectResponse(
-                    url=f"/runs/{entity}/{proj['name']}/{run['run_id']}?share_token={token}",
+                    url=f"{ROOT_PATH}/runs/{entity}/{proj['name']}/{run['run_id']}?share_token={token}",
                     status_code=302
                 )
 

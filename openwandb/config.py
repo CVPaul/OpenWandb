@@ -17,6 +17,10 @@ from pathlib import Path
 HOST = os.getenv("OPENWANDB_HOST", "0.0.0.0")
 PORT = int(os.getenv("OPENWANDB_PORT", "8080"))
 
+# === 反向代理路径前缀 ===
+# 例如通过 https://example.com/my/prefix/ 访问时, 设置 ROOT_PATH="/my/prefix"
+ROOT_PATH = os.getenv("OPENWANDB_ROOT_PATH", "").rstrip("/")
+
 # === 包内资源路径 (只读, 随包安装) ===
 PACKAGE_DIR = Path(__file__).parent
 TEMPLATES_DIR = PACKAGE_DIR / "templates"

@@ -61,7 +61,9 @@ def main(ctx):
               type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
               help="Log level (default: INFO)")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev mode)")
-def serve(host, port, data_dir, log_level, reload):
+@click.option("--root-path", default=None,
+              help="URL path prefix for reverse proxy (e.g. /my/prefix)")
+def serve(host, port, data_dir, log_level, reload, root_path):
     """Start the OpenWandb server."""
     # 在 import config 之前设置环境变量 (config 在导入时读取)
     if data_dir:
@@ -72,11 +74,15 @@ def serve(host, port, data_dir, log_level, reload):
         os.environ["OPENWANDB_PORT"] = str(port)
     if log_level:
         os.environ["OPENWANDB_LOG_LEVEL"] = log_level.upper()
+    if root_path:
+        os.environ["OPENWANDB_ROOT_PATH"] = root_path
 
     # 现在导入 config (触发目录创建)
-    from openwandb.config import HOST, PORT, LOG_LEVEL, DATA_DIR
+    from openwandb.config import HOST, PORT, LOG_LEVEL, DATA_DIR, ROOT_PATH
 
     _print_banner(HOST, PORT, DATA_DIR)
+    if ROOT_PATH:
+        click.echo(f"  Root path:      {ROOT_PATH}")
 
     import uvicorn
     uvicorn.run(
@@ -85,6 +91,7 @@ def serve(host, port, data_dir, log_level, reload):
         port=PORT,
         log_level=LOG_LEVEL.lower(),
         reload=reload,
+        root_path=ROOT_PATH,
     )
 
 

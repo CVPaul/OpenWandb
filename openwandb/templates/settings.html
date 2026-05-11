@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenWandb - Settings</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <style>
         .settings-grid {
             display: grid;
@@ -154,14 +154,14 @@
 <body>
     <!-- 导航栏 -->
     <nav class="navbar">
-        <a href="/" class="navbar-brand">
+        <a href="{{ base_path }}/" class="navbar-brand">
             <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
             OpenWandb
         </a>
         <div class="navbar-links">
-            <a href="/">Projects</a>
+            <a href="{{ base_path }}/">Projects</a>
             <span style="color: var(--text-secondary); font-size: 14px;">{{ user.username }}</span>
             <a href="#" onclick="doLogout()" style="color: var(--danger);">Logout</a>
         </div>
@@ -243,7 +243,7 @@
                         <ul class="team-list">
                             {% for team in teams %}
                             <li>
-                                <a href="/teams/{{ team.name }}">
+                                <a href="{{ base_path }}/teams/{{ team.name }}">
                                     <strong>{{ team.display_name or team.name }}</strong>
                                     <span style="color: var(--text-muted); font-size: 13px; margin-left: 8px;">({{ team.name }})</span>
                                 </a>
@@ -289,7 +289,7 @@
             const name = prompt('API Key name:', 'default');
             if (!name) return;
             try {
-                const resp = await fetch('/api/v2/settings/api-keys', {
+                const resp = await fetch('{{ base_path }}/api/v2/settings/api-keys', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({name})
@@ -319,7 +319,7 @@
         async function deleteKey(keyId) {
             if (!confirm('Delete this API key? This cannot be undone.')) return;
             try {
-                const resp = await fetch(`/api/v2/settings/api-keys/${keyId}`, {method: 'DELETE'});
+                const resp = await fetch(`{{ base_path }}/api/v2/settings/api-keys/${keyId}`, {method: 'DELETE'});
                 if (resp.ok) {
                     document.getElementById('key-' + keyId).remove();
                 } else {
@@ -340,7 +340,7 @@
             if (!name) { alert('Team name is required'); return; }
 
             try {
-                const resp = await fetch('/api/v2/teams', {
+                const resp = await fetch('{{ base_path }}/api/v2/teams', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({name, display_name: displayName || name})
@@ -357,8 +357,8 @@
         }
 
         async function doLogout() {
-            await fetch('/api/v2/auth/logout', {method: 'POST'});
-            window.location.href = '/login';
+            await fetch('{{ base_path }}/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '{{ base_path }}/login';
         }
     </script>
 </body>

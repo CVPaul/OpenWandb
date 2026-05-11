@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenWandb - Login</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <style>
         .auth-container {
             max-width: 420px;
@@ -95,7 +95,7 @@
 <body>
     <!-- 导航栏 -->
     <nav class="navbar">
-        <a href="/" class="navbar-brand">
+        <a href="{{ base_path }}/" class="navbar-brand">
             <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
@@ -192,7 +192,7 @@
             document.getElementById('authError').style.display = 'none';
 
             try {
-                const resp = await fetch('/api/v2/auth/login', {
+                const resp = await fetch('{{ base_path }}/api/v2/auth/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -202,7 +202,7 @@
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success) {
-                    window.location.href = '/';
+                    window.location.href = '{{ base_path }}/';
                 } else {
                     showError(data.detail || 'Login failed');
                 }
@@ -229,7 +229,7 @@
             document.getElementById('authError').style.display = 'none';
 
             try {
-                const resp = await fetch('/api/v2/auth/register', {
+                const resp = await fetch('{{ base_path }}/api/v2/auth/register', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -241,7 +241,7 @@
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success) {
-                    window.location.href = '/';
+                    window.location.href = '{{ base_path }}/';
                 } else {
                     showError(data.detail || 'Registration failed');
                 }

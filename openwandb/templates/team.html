@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenWandb - Team: {{ team.display_name or team.name }}</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <style>
         .team-header {
             display: flex;
@@ -76,23 +76,23 @@
 <body>
     <!-- 导航栏 -->
     <nav class="navbar">
-        <a href="/" class="navbar-brand">
+        <a href="{{ base_path }}/" class="navbar-brand">
             <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
             OpenWandb
         </a>
         <div class="navbar-links">
-            <a href="/">Projects</a>
-            <a href="/settings">Settings</a>
+            <a href="{{ base_path }}/">Projects</a>
+            <a href="{{ base_path }}/settings">Settings</a>
             <span style="color: var(--text-secondary); font-size: 14px;">{{ user.username }}</span>
             <a href="#" onclick="doLogout()" style="color: var(--danger);">Logout</a>
         </div>
     </nav>
 
     <div class="breadcrumb">
-        <a href="/">Home</a> <span>/</span>
-        <a href="/settings">Settings</a> <span>/</span>
+        <a href="{{ base_path }}/">Home</a> <span>/</span>
+        <a href="{{ base_path }}/settings">Settings</a> <span>/</span>
         <span style="color: var(--text-primary);">Team: {{ team.name }}</span>
     </div>
 
@@ -174,7 +174,7 @@
         {% if projects %}
         <div class="project-grid">
             {% for project in projects %}
-            <a href="/projects/{{ team.name }}/{{ project.name }}" class="project-card">
+            <a href="{{ base_path }}/projects/{{ team.name }}/{{ project.name }}" class="project-card">
                 <h3>{{ project.name }}</h3>
                 <p style="color: var(--text-secondary); font-size: 14px;">
                     {{ project.description or 'No description' }}
@@ -206,7 +206,7 @@
             if (!username) { alert('Please enter a username'); return; }
 
             try {
-                const resp = await fetch(`/api/v2/teams/${TEAM}/members`, {
+                const resp = await fetch(`{{ base_path }}/api/v2/teams/${TEAM}/members`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({username, role})
@@ -224,7 +224,7 @@
 
         async function updateRole(userId, newRole) {
             try {
-                const resp = await fetch(`/api/v2/teams/${TEAM}/members/${userId}`, {
+                const resp = await fetch(`{{ base_path }}/api/v2/teams/${TEAM}/members/${userId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({role: newRole})
@@ -242,7 +242,7 @@
         async function removeMember(userId) {
             if (!confirm('Remove this member from the team?')) return;
             try {
-                const resp = await fetch(`/api/v2/teams/${TEAM}/members/${userId}`, {method: 'DELETE'});
+                const resp = await fetch(`{{ base_path }}/api/v2/teams/${TEAM}/members/${userId}`, {method: 'DELETE'});
                 if (resp.ok) {
                     document.getElementById('member-' + userId).remove();
                 } else {
@@ -254,8 +254,8 @@
         }
 
         async function doLogout() {
-            await fetch('/api/v2/auth/logout', {method: 'POST'});
-            window.location.href = '/login';
+            await fetch('{{ base_path }}/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '{{ base_path }}/login';
         }
     </script>
 </body>

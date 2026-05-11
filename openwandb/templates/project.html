@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ project.name }} - OpenWandb</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <style>
         .share-modal {
             display: none;
@@ -52,29 +52,29 @@
 </head>
 <body>
     <nav class="navbar">
-        <a href="/" class="navbar-brand">
+        <a href="{{ base_path }}/" class="navbar-brand">
             <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
             OpenWandb
         </a>
         <div class="navbar-links">
-            <a href="/">Projects</a>
-            <a href="/compare/{{ entity }}/{{ project.name }}">Compare Runs</a>
+            <a href="{{ base_path }}/">Projects</a>
+            <a href="{{ base_path }}/compare/{{ entity }}/{{ project.name }}">Compare Runs</a>
             {% if user %}
-            <a href="/settings">Settings</a>
+            <a href="{{ base_path }}/settings">Settings</a>
             <span style="color: var(--text-secondary); font-size: 13px;">{{ user.username }}</span>
             <a href="#" onclick="doLogout()" style="color: var(--danger); font-size: 13px;">Logout</a>
             {% else %}
-            <a href="/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
+            <a href="{{ base_path }}/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
             {% endif %}
         </div>
     </nav>
 
     <div class="breadcrumb">
-        <a href="/">Projects</a>
+        <a href="{{ base_path }}/">Projects</a>
         <span>/</span>
-        <a href="/projects/{{ entity }}/{{ project.name }}">{{ entity }} / {{ project.name }}</a>
+        <a href="{{ base_path }}/projects/{{ entity }}/{{ project.name }}">{{ entity }} / {{ project.name }}</a>
     </div>
 
     <div class="container fade-in">
@@ -107,7 +107,7 @@
                     Share
                 </button>
                 {% endif %}
-                <a href="/compare/{{ entity }}/{{ project.name }}" class="btn btn-primary">
+                <a href="{{ base_path }}/compare/{{ entity }}/{{ project.name }}" class="btn btn-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="20" x2="18" y2="10"></line>
                         <line x1="12" y1="20" x2="12" y2="4"></line>
@@ -175,7 +175,7 @@
                     {% for run in runs %}
                     <tr data-name="{{ run.display_name }}" data-state="{{ run.state }}">
                         <td>
-                            <a href="/runs/{{ entity }}/{{ project.name }}/{{ run.run_id }}">
+                            <a href="{{ base_path }}/runs/{{ entity }}/{{ project.name }}/{{ run.run_id }}">
                                 <strong>{{ run.display_name or run.run_id }}</strong>
                             </a>
                             <div style="font-size: 11px; color: var(--text-muted); font-family: var(--mono);">
@@ -292,7 +292,7 @@ wandb.log({"loss": 0.5, "accuracy": 0.8})
             btn.disabled = true;
             btn.textContent = 'Generating...';
             try {
-                const resp = await fetch('/api/v2/share', {
+                const resp = await fetch('{{ base_path }}/api/v2/share', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({resource_type: 'project', resource_id: PROJECT_ID})
@@ -320,7 +320,7 @@ wandb.log({"loss": 0.5, "accuracy": 0.8})
 
         async function changeVisibility(val) {
             try {
-                await fetch(`/api/v2/projects/${PROJECT_ID}/visibility`, {
+                await fetch(`{{ base_path }}/api/v2/projects/${PROJECT_ID}/visibility`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({visibility: val})
@@ -331,8 +331,8 @@ wandb.log({"loss": 0.5, "accuracy": 0.8})
         }
 
         async function doLogout() {
-            await fetch('/api/v2/auth/logout', {method: 'POST'});
-            window.location.href = '/login';
+            await fetch('{{ base_path }}/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '{{ base_path }}/login';
         }
     </script>
 </body>

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenWandb - Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <style>
         .team-switcher {
             display: inline-flex;
@@ -46,7 +46,7 @@
     <!-- 导航栏 -->
     <nav class="navbar">
         <div style="display: flex; align-items: center;">
-            <a href="/" class="navbar-brand">
+            <a href="{{ base_path }}/" class="navbar-brand">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
@@ -66,13 +66,13 @@
             {% endif %}
         </div>
         <div class="navbar-links">
-            <a href="/">Projects</a>
+            <a href="{{ base_path }}/">Projects</a>
             {% if user %}
-            <a href="/settings">Settings</a>
+            <a href="{{ base_path }}/settings">Settings</a>
             <span class="username" style="color: var(--text-secondary); font-size: 13px;">{{ user.username }}</span>
             <a href="#" onclick="doLogout()" style="color: var(--danger); font-size: 13px;">Logout</a>
             {% else %}
-            <a href="/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
+            <a href="{{ base_path }}/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
             {% endif %}
         </div>
     </nav>
@@ -112,7 +112,7 @@
         <!-- 项目卡片 -->
         <div class="project-grid" id="projectGrid">
             {% for project in projects %}
-            <a href="/projects/{{ project.entity }}/{{ project.name }}" class="project-card" data-name="{{ project.name }}">
+            <a href="{{ base_path }}/projects/{{ project.entity }}/{{ project.name }}" class="project-card" data-name="{{ project.name }}">
                 <h3>
                     {{ project.name }}
                     {% if project.visibility == 'public' %}
@@ -181,13 +181,13 @@ wandb.log({"loss": 0.5})
 
         // 团队切换
         function switchTeam(teamName) {
-            window.location.href = '/?team=' + encodeURIComponent(teamName);
+            window.location.href = '{{ base_path }}/?team=' + encodeURIComponent(teamName);
         }
 
         // 登出
         async function doLogout() {
-            await fetch('/api/v2/auth/logout', {method: 'POST'});
-            window.location.href = '/login';
+            await fetch('{{ base_path }}/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '{{ base_path }}/login';
         }
     </script>
 </body>
