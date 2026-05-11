@@ -300,7 +300,7 @@ open-wandb/
 ├── examples/
 │   ├── example_train.py       # 模拟训练示例
 │   └── example_mlp.py         # MNIST MLP 真实训练示例
-├── src/openwandb/             # Python 包
+├── openwandb/                 # Python 包
 │   ├── __init__.py            # 版本号
 │   ├── __main__.py            # python -m openwandb
 │   ├── cli.py                 # CLI 命令 (serve/init/version)

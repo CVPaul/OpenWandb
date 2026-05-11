@@ -48,4 +48,4 @@ Issues = "https://github.com/CVPaul/OpenWandb/issues"
 openwandb = "openwandb.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/openwandb"]
+packages = ["openwandb"]

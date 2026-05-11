@@ -12,9 +12,6 @@ OpenWandb — 开发模式启动脚本
 import sys
 import os
 
-# 开发模式: 将 src/ 加入 Python Path, 使包导入无需安装即可工作
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
-
 # 开发模式默认数据目录: ./data/ (保留旧行为, 不写入 ~/.openwandb)
 os.environ.setdefault("OPENWANDB_DATA_DIR",
                       os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"))
