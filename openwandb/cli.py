@@ -4,9 +4,11 @@ OpenWandb CLI — 服务管理命令行工具
 用法:
     openwandb serve          # 启动服务器
     openwandb init           # 初始化数据目录
+    openwandb demo           # 生成并运行演示脚本
     openwandb version        # 显示版本
 """
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,7 +23,7 @@ def _print_banner(host: str, port: int, data_dir: Path):
  | (_) | '_ \/ -_) ' \| |/\| / _` | ' \ ' \/ _` | '_ \
   \___/| .__/\___|_||_|__/\__\__,_|_||_|_||_\__,_|_.__/
        |_|
-    Open Source WandB Server v0.3.0
+    Open Source WandB Server v0.3.2
     Multi-tenant | Sharing | Team Management
     """)
     click.echo(f"  Data directory: {data_dir}")
@@ -115,6 +117,110 @@ def init(data_dir):
 
     click.echo()
     click.echo("Done! Run 'openwandb serve' to start the server.")
+
+
+@main.command()
+@click.option("--server-url", default=None,
+              help="OpenWandb server URL (default: http://localhost:8080)")
+@click.option("--api-key", default=None,
+              help="API key (default: local0000...)")
+@click.option("--project", default="regression-demo",
+              help="Project name (default: regression-demo)")
+@click.option("--runs", default=3, type=int, help="Number of demo runs (default: 3)")
+@click.option("--epochs", default=30, type=int, help="Epochs per run (default: 30)")
+@click.option("--no-run", is_flag=True, default=False,
+              help="Only generate script, don't execute")
+@click.option("--output", "-o", default="openwandb-demo.py", type=click.Path(),
+              help="Output script path (default: openwandb-demo.py)")
+def demo(server_url, api_key, project, runs, epochs, no_run, output):
+    """Generate and run a professional ML training demo.
+
+    \b
+    Creates a self-contained demo script in the current directory and
+    executes it. The demo showcases wandb SDK features:
+      • Config tracking & hyperparameter logging
+      • Real-time metric logging (loss, accuracy, R²)
+      • Namespace grouping (train/*, val/*)
+      • Learning rate scheduling with cosine annealing
+      • Run comparison across different model architectures
+      • Tags, notes, and group for organizing experiments
+
+    \b
+    Examples:
+      openwandb demo                     # Default: 3 runs × 30 epochs
+      openwandb demo --runs 5 --epochs 50
+      openwandb demo --no-run            # Only generate script
+      openwandb demo --server-url http://myserver:8080
+    """
+    if server_url is None:
+        server_url = os.environ.get("WANDB_BASE_URL", "http://localhost:8080")
+    if api_key is None:
+        api_key = os.environ.get(
+            "WANDB_API_KEY",
+            "local0000000000000000000000000000000000000000"
+        )
+
+    # 读取包内 demo 模板
+    demo_template_path = Path(__file__).parent / "demo_script.py"
+    template = demo_template_path.read_text(encoding="utf-8")
+
+    # 替换参数占位符
+    script_content = (template
+                      .replace("{server_url}", server_url)
+                      .replace("{api_key}", api_key)
+                      .replace("{project}", project)
+                      .replace("{num_runs}", str(runs))
+                      .replace("{epochs}", str(epochs)))
+
+    # 写出到目标文件
+    output_path = Path(output).resolve()
+    output_path.write_text(script_content, encoding="utf-8")
+
+    click.echo()
+    click.echo("=" * 60)
+    click.echo("  OpenWandb Demo — ML Experiment Tracking Showcase")
+    click.echo("=" * 60)
+    click.echo()
+    click.echo(f"  Demo script saved to: {output_path}")
+    click.echo(f"  You can re-run it anytime: python {output}")
+    click.echo()
+    click.echo(f"  Server:     {server_url}")
+    click.echo(f"  Project:    {project}")
+    click.echo(f"  Runs:       {runs}")
+    click.echo(f"  Epochs:     {epochs}")
+    click.echo("=" * 60)
+
+    if no_run:
+        click.echo()
+        click.echo("  --no-run specified, skipping execution.")
+        click.echo(f"  Run it manually: python {output}")
+        click.echo()
+        return
+
+    # 检查 wandb SDK 是否安装
+    try:
+        import wandb  # noqa: F401
+    except ImportError:
+        click.echo()
+        click.secho("  ERROR: wandb SDK not installed.", fg="red", bold=True)
+        click.echo("  Install it first: pip install wandb")
+        click.echo(f"  Then run: python {output}")
+        click.echo()
+        sys.exit(1)
+
+    click.echo()
+    click.echo("  Running demo...")
+    click.echo()
+
+    # 执行生成的脚本 (使用当前 Python 解释器)
+    result = subprocess.run(
+        [sys.executable, str(output_path)],
+        cwd=str(output_path.parent),
+    )
+
+    if result.returncode != 0:
+        click.secho(f"\n  Demo exited with code {result.returncode}", fg="red")
+        sys.exit(result.returncode)
 
 
 @main.command()
