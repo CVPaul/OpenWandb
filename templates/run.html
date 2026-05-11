@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ run.display_name }} - OpenWandb</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+        .share-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .share-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+        .share-toast {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--accent);
+            border-radius: var(--radius);
+            padding: 12px 20px;
+            color: var(--accent);
+            font-size: 13px;
+            z-index: 200;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
+        </a>
+        <div class="navbar-links">
+            <a href="/">Projects</a>
+            <a href="/projects/{{ entity }}/{{ project_name }}">{{ project_name }}</a>
+            {% if user %}
+            <a href="/settings">Settings</a>
+            <span style="color: var(--text-secondary); font-size: 13px;">{{ user.username }}</span>
+            <a href="#" onclick="doLogout()" style="color: var(--danger); font-size: 13px;">Logout</a>
+            {% else %}
+            <a href="/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="breadcrumb">
+        <a href="/">Projects</a>
+        <span>/</span>
+        <a href="/projects/{{ entity }}/{{ project_name }}">{{ entity }} / {{ project_name }}</a>
+        <span>/</span>
+        <span>{{ run.display_name }}</span>
+    </div>
+
+    <div class="container fade-in">
+        <!-- 运行信息头 -->
+        <div class="page-header">
+            <div>
+                <h1>{{ run.display_name or run.run_id }}</h1>
+                <div class="subtitle">
+                    <span class="badge badge-{{ run.state }}">
+                        {% if run.state == 'running' %}<span class="pulse"></span>{% endif %}
+                        {{ run.state }}
+                    </span>
+                    &nbsp; Run ID: <code style="font-family: var(--mono); color: var(--text-secondary);">{{ run.run_id }}</code>
+                    &nbsp; Created: {{ run.created_at[:19].replace('T', ' ') }}
+                </div>
+            </div>
+            {% if user %}
+            <button class="share-btn" onclick="shareRun()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"></circle>
+                    <circle cx="6" cy="12" r="3"></circle>
+                    <circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                Share
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('charts')">Charts</div>
+            <div class="tab" onclick="switchTab('config')">Config</div>
+            <div class="tab" onclick="switchTab('summary')">Summary</div>
+            <div class="tab" onclick="switchTab('system')">System</div>
+        </div>
+
+        <!-- Charts Tab -->
+        <div id="tab-charts" class="tab-content">
+            {% if metric_keys %}
+            <div class="chart-grid" id="chartGrid">
+                {% for key in metric_keys %}
+                <div class="chart-box">
+                    <h4>{{ key }}</h4>
+                    <div class="chart-container" id="chart-{{ loop.index }}"></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <h3>No metrics logged yet</h3>
+                <p>Use wandb.log() to record metrics during training.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Config Tab -->
+        <div id="tab-config" class="tab-content" style="display: none;">
+            <div class="panel">
+                <div class="panel-header">
+                    <h3>Hyperparameters & Config</h3>
+                </div>
+                <div class="panel-body">
+                    {% if run.config %}
+                    <table class="config-table">
+                        {% for key, value in run.config.items() %}
+                        {% if not key.startswith('_') %}
+                        <tr>
+                            <td class="config-key">{{ key }}</td>
+                            <td class="config-value">{{ value }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </table>
+                    {% else %}
+                    <p style="color: var(--text-muted);">No configuration recorded.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Tab -->
+        <div id="tab-summary" class="tab-content" style="display: none;">
+            <div class="panel">
+                <div class="panel-header">
+                    <h3>Run Summary</h3>
+                </div>
+                <div class="panel-body">
+                    {% if run.summary %}
+                    <table class="config-table">
+                        {% for key, value in run.summary.items() %}
+                        {% if not key.startswith('_') %}
+                        <tr>
+                            <td class="config-key">{{ key }}</td>
+                            <td class="config-value">
+                                {% if value is number %}
+                                    {{ "%.6f"|format(value) }}
+                                {% else %}
+                                    {{ value }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </table>
+                    {% else %}
+                    <p style="color: var(--text-muted);">No summary data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if run.tags %}
+            <div class="panel">
+                <div class="panel-header"><h3>Tags</h3></div>
+                <div class="panel-body">
+                    {% for tag in run.tags %}
+                    <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if run.notes %}
+            <div class="panel">
+                <div class="panel-header"><h3>Notes</h3></div>
+                <div class="panel-body">
+                    <p>{{ run.notes }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- System Tab -->
+        <div id="tab-system" class="tab-content" style="display: none;">
+            <div id="systemCharts" class="chart-grid"></div>
+            <div id="systemEmpty" class="empty-state" style="display: none;">
+                <h3>No system metrics</h3>
+                <p>System metrics (CPU, GPU, memory) will appear here when available.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share toast -->
+    <div class="share-toast" id="shareToast">Share link copied to clipboard!</div>
+
+    <script>
+        const RUN_ID = "{{ run.run_id }}";
+        const RUN_DB_ID = {{ run.id }};
+        const METRIC_KEYS = {{ metric_keys | tojson }};
+
+        // Tab 切换
+        function switchTab(name) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + name).style.display = '';
+            event.target.classList.add('active');
+            if (name === 'system') loadSystemMetrics();
+        }
+
+        // ECharts 深色主题
+        const COLORS = ['#f0b429', '#00cfe8', '#28c76f', '#ea5455', '#ff9f43',
+                         '#7367f0', '#ff6b6b', '#48dbfb', '#feca57', '#54a0ff'];
+
+        function createChart(container, title, steps, values, color) {
+            const chart = echarts.init(container);
+            chart.setOption({
+                backgroundColor: 'transparent',
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: '#16213e',
+                    borderColor: '#2a3a5e',
+                    textStyle: { color: '#e0e0e0', fontSize: 12 }
+                },
+                grid: { left: 60, right: 20, top: 20, bottom: 40 },
+                xAxis: {
+                    type: 'category',
+                    data: steps,
+                    name: 'step',
+                    nameTextStyle: { color: '#6e6e80' },
+                    axisLine: { lineStyle: { color: '#2a3a5e' } },
+                    axisLabel: { color: '#6e6e80', fontSize: 11 },
+                    splitLine: { show: false }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#2a3a5e' } },
+                    axisLabel: { color: '#6e6e80', fontSize: 11 },
+                    splitLine: { lineStyle: { color: '#1e2a4a' } }
+                },
+                series: [{
+                    type: 'line',
+                    data: values,
+                    smooth: true,
+                    symbol: 'none',
+                    lineStyle: { width: 2, color: color },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: color + '40' },
+                            { offset: 1, color: color + '05' }
+                        ])
+                    }
+                }]
+            });
+            window.addEventListener('resize', () => chart.resize());
+            return chart;
+        }
+
+        // 加载指标图表
+        async function loadCharts() {
+            if (!METRIC_KEYS.length) return;
+            try {
+                const resp = await fetch(`/api/v2/runs/${RUN_ID}/metrics`);
+                const data = await resp.json();
+                METRIC_KEYS.forEach((key, idx) => {
+                    const container = document.getElementById(`chart-${idx + 1}`);
+                    if (!container) return;
+                    const metrics = data.metrics_by_key[key] || [];
+                    const steps = metrics.map(m => m.step);
+                    const values = metrics.map(m => m.value);
+                    const color = COLORS[idx % COLORS.length];
+                    createChart(container, key, steps, values, color);
+                });
+            } catch (err) {
+                console.error('Failed to load metrics:', err);
+            }
+        }
+
+        // 加载系统指标
+        async function loadSystemMetrics() {
+            try {
+                const resp = await fetch(`/api/v2/runs/${RUN_ID}/system_metrics`);
+                const data = await resp.json();
+                const sysMetrics = data.system_metrics;
+                const keys = Object.keys(sysMetrics);
+                if (!keys.length) {
+                    document.getElementById('systemEmpty').style.display = '';
+                    return;
+                }
+                const container = document.getElementById('systemCharts');
+                container.innerHTML = '';
+                keys.forEach((key, idx) => {
+                    const box = document.createElement('div');
+                    box.className = 'chart-box';
+                    box.innerHTML = `<h4>${key}</h4><div class="chart-container" id="sys-chart-${idx}"></div>`;
+                    container.appendChild(box);
+                    const metrics = sysMetrics[key];
+                    const times = metrics.map((m, i) => i);
+                    const values = metrics.map(m => m.value);
+                    const color = COLORS[(idx + 3) % COLORS.length];
+                    setTimeout(() => {
+                        createChart(document.getElementById(`sys-chart-${idx}`), key, times, values, color);
+                    }, 50);
+                });
+            } catch (err) {
+                console.error('Failed to load system metrics:', err);
+                document.getElementById('systemEmpty').style.display = '';
+            }
+        }
+
+        // 分享
+        async function shareRun() {
+            try {
+                const resp = await fetch('/api/v2/share', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({resource_type: 'run', resource_id: RUN_DB_ID})
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    const url = window.location.origin + '/s/' + data.share_link.token;
+                    navigator.clipboard.writeText(url);
+                    const toast = document.getElementById('shareToast');
+                    toast.style.display = 'block';
+                    setTimeout(() => toast.style.display = 'none', 3000);
+                } else {
+                    alert(data.detail || 'Failed to create share link');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        // 登出
+        async function doLogout() {
+            await fetch('/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '/login';
+        }
+
+        // 自动刷新
+        {% if run.state == 'running' %}
+        setInterval(loadCharts, 10000);
+        {% endif %}
+
+        // 初始加载
+        loadCharts();
+    </script>
+</body>
+</html>

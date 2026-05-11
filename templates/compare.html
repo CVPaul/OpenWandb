@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Runs - {{ project.name }} - OpenWandb</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
+        </a>
+        <div class="navbar-links">
+            <a href="/">Projects</a>
+            <a href="/projects/{{ entity }}/{{ project.name }}">{{ project.name }}</a>
+            {% if user %}
+            <span style="color: var(--text-secondary); font-size: 13px;">{{ user.username }}</span>
+            <a href="#" onclick="doLogout()" style="color: var(--danger); font-size: 13px;">Logout</a>
+            {% else %}
+            <a href="/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="breadcrumb">
+        <a href="/">Projects</a>
+        <span>/</span>
+        <a href="/projects/{{ entity }}/{{ project.name }}">{{ entity }} / {{ project.name }}</a>
+        <span>/</span>
+        <span>Compare</span>
+    </div>
+
+    <div class="container fade-in">
+        <div class="page-header">
+            <div>
+                <h1>Compare Runs</h1>
+                <div class="subtitle">{{ project.name }} &middot; Select runs to compare their metrics</div>
+            </div>
+        </div>
+
+        {% if runs %}
+        <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+            <!-- 左侧: 运行选择 -->
+            <div style="min-width: 300px; flex: 0 0 300px;">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Select Runs</h3>
+                        <button class="btn btn-sm" onclick="selectAll()">Select All</button>
+                    </div>
+                    <div class="panel-body" style="max-height: 500px; overflow-y: auto;">
+                        {% for run in runs %}
+                        <div class="checkbox-wrapper" style="margin-bottom: 8px;">
+                            <input type="checkbox" id="run-{{ run.run_id }}"
+                                   value="{{ run.run_id }}"
+                                   onchange="onRunSelectionChange()"
+                                   {% if run.run_id in selected_ids %}checked{% endif %}>
+                            <label for="run-{{ run.run_id }}" style="cursor: pointer; font-size: 13px;">
+                                <span style="font-weight: 500;">{{ run.display_name or run.run_id }}</span>
+                                <span class="badge badge-{{ run.state }}" style="margin-left: 6px; font-size: 10px;">
+                                    {{ run.state }}
+                                </span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- 超参数对比表 -->
+                <div class="panel" id="configPanel" style="display: none;">
+                    <div class="panel-header"><h3>Config Comparison</h3></div>
+                    <div class="panel-body">
+                        <div style="overflow-x: auto;">
+                            <table class="config-table" id="configTable">
+                                <thead><tr id="configHeader"></tr></thead>
+                                <tbody id="configBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧: 图表 -->
+            <div style="flex: 1; min-width: 0;">
+                <div id="compareCharts" class="chart-grid"></div>
+                <div id="compareEmpty" class="empty-state">
+                    <h3>Select runs to compare</h3>
+                    <p>Check the runs on the left to overlay their metrics on the same charts.</p>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <h3>No runs available</h3>
+            <p>Create some runs first, then come back to compare them.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        const ENTITY = "{{ entity }}";
+        const PROJECT = "{{ project.name }}";
+        const ALL_RUNS = {{ runs | tojson }};
+        const COLORS = ['#f0b429', '#00cfe8', '#28c76f', '#ea5455', '#ff9f43',
+                         '#7367f0', '#ff6b6b', '#48dbfb', '#feca57', '#54a0ff'];
+        let charts = [];
+
+        function getSelectedRunIds() {
+            const checked = document.querySelectorAll('input[type="checkbox"]:checked');
+            return Array.from(checked).map(cb => cb.value);
+        }
+
+        function selectAll() {
+            const boxes = document.querySelectorAll('input[type="checkbox"]');
+            const allChecked = Array.from(boxes).every(b => b.checked);
+            boxes.forEach(b => b.checked = !allChecked);
+            onRunSelectionChange();
+        }
+
+        async function onRunSelectionChange() {
+            const selectedIds = getSelectedRunIds();
+
+            if (!selectedIds.length) {
+                document.getElementById('compareCharts').innerHTML = '';
+                document.getElementById('compareEmpty').style.display = '';
+                document.getElementById('configPanel').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('compareEmpty').style.display = 'none';
+
+            const allMetrics = {};
+            const allKeys = new Set();
+
+            for (const runId of selectedIds) {
+                try {
+                    const resp = await fetch(`/api/v2/runs/${runId}/metrics`);
+                    const data = await resp.json();
+                    allMetrics[runId] = data.metrics_by_key || {};
+                    (data.keys || []).forEach(k => allKeys.add(k));
+                } catch (err) {
+                    console.error(`Failed to fetch metrics for ${runId}:`, err);
+                }
+            }
+
+            renderCompareCharts(selectedIds, allMetrics, Array.from(allKeys));
+            renderConfigComparison(selectedIds);
+        }
+
+        function renderCompareCharts(runIds, allMetrics, keys) {
+            const container = document.getElementById('compareCharts');
+            container.innerHTML = '';
+            charts.forEach(c => c.dispose());
+            charts = [];
+
+            if (!keys.length) {
+                document.getElementById('compareEmpty').style.display = '';
+                document.getElementById('compareEmpty').querySelector('h3').textContent = 'No metrics to compare';
+                return;
+            }
+
+            keys.forEach((key, keyIdx) => {
+                const box = document.createElement('div');
+                box.className = 'chart-box';
+                box.innerHTML = `<h4>${key}</h4><div class="chart-container" id="compare-chart-${keyIdx}"></div>`;
+                container.appendChild(box);
+
+                setTimeout(() => {
+                    const chartDom = document.getElementById(`compare-chart-${keyIdx}`);
+                    const chart = echarts.init(chartDom);
+                    charts.push(chart);
+
+                    const series = [];
+                    runIds.forEach((runId, runIdx) => {
+                        const metrics = (allMetrics[runId] || {})[key] || [];
+                        const run = ALL_RUNS.find(r => r.run_id === runId);
+                        const name = run ? (run.display_name || run.run_id) : runId;
+                        const color = COLORS[runIdx % COLORS.length];
+
+                        series.push({
+                            name: name,
+                            type: 'line',
+                            smooth: true,
+                            symbol: 'none',
+                            data: metrics.map(m => [m.step, m.value]),
+                            lineStyle: { width: 2, color: color },
+                        });
+                    });
+
+                    chart.setOption({
+                        backgroundColor: 'transparent',
+                        tooltip: {
+                            trigger: 'axis',
+                            backgroundColor: '#16213e',
+                            borderColor: '#2a3a5e',
+                            textStyle: { color: '#e0e0e0', fontSize: 12 }
+                        },
+                        legend: {
+                            type: 'scroll',
+                            bottom: 0,
+                            textStyle: { color: '#a0a0b0', fontSize: 11 }
+                        },
+                        grid: { left: 60, right: 20, top: 10, bottom: 50 },
+                        xAxis: {
+                            type: 'value',
+                            name: 'step',
+                            nameTextStyle: { color: '#6e6e80' },
+                            axisLine: { lineStyle: { color: '#2a3a5e' } },
+                            axisLabel: { color: '#6e6e80', fontSize: 11 },
+                            splitLine: { show: false }
+                        },
+                        yAxis: {
+                            type: 'value',
+                            axisLine: { lineStyle: { color: '#2a3a5e' } },
+                            axisLabel: { color: '#6e6e80', fontSize: 11 },
+                            splitLine: { lineStyle: { color: '#1e2a4a' } }
+                        },
+                        series: series
+                    });
+
+                    window.addEventListener('resize', () => chart.resize());
+                }, 50);
+            });
+        }
+
+        function renderConfigComparison(runIds) {
+            const panel = document.getElementById('configPanel');
+            const header = document.getElementById('configHeader');
+            const body = document.getElementById('configBody');
+
+            if (runIds.length < 2) {
+                panel.style.display = 'none';
+                return;
+            }
+            panel.style.display = '';
+
+            const allConfigKeys = new Set();
+            const configs = {};
+            runIds.forEach(id => {
+                const run = ALL_RUNS.find(r => r.run_id === id);
+                if (run && run.config) {
+                    configs[id] = run.config;
+                    Object.keys(run.config).forEach(k => {
+                        if (!k.startsWith('_')) allConfigKeys.add(k);
+                    });
+                }
+            });
+
+            header.innerHTML = '<th style="font-size:12px;">Config Key</th>';
+            runIds.forEach((id, idx) => {
+                const run = ALL_RUNS.find(r => r.run_id === id);
+                const name = run ? (run.display_name || run.run_id) : id;
+                header.innerHTML += `<th style="font-size:12px; color: ${COLORS[idx % COLORS.length]};">${name}</th>`;
+            });
+
+            body.innerHTML = '';
+            Array.from(allConfigKeys).sort().forEach(key => {
+                let row = `<td class="config-key">${key}</td>`;
+                const values = runIds.map(id => (configs[id] || {})[key]);
+                const allSame = values.every(v => JSON.stringify(v) === JSON.stringify(values[0]));
+
+                runIds.forEach((id, idx) => {
+                    const val = (configs[id] || {})[key];
+                    const style = allSame ? '' : 'font-weight: bold; color: var(--warning);';
+                    row += `<td class="config-value" style="${style}">${val !== undefined ? val : '-'}</td>`;
+                });
+
+                body.innerHTML += `<tr>${row}</tr>`;
+            });
+        }
+
+        async function doLogout() {
+            await fetch('/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '/login';
+        }
+
+        {% if selected_ids %}
+        onRunSelectionChange();
+        {% endif %}
+    </script>
+</body>
+</html>

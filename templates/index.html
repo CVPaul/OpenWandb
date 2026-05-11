@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenWandb - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .team-switcher {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 16px;
+        }
+        .team-switcher select {
+            padding: 4px 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .user-menu .username {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .visibility-badge {
+            display: inline-block;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+        .vis-public { background: rgba(40, 199, 111, 0.15); color: var(--success); }
+        .vis-team { background: rgba(0, 207, 232, 0.15); color: var(--info); }
+        .vis-private { background: rgba(234, 84, 85, 0.15); color: var(--danger); }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div style="display: flex; align-items: center;">
+            <a href="/" class="navbar-brand">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                OpenWandb
+            </a>
+            {% if user and teams %}
+            <div class="team-switcher">
+                <span style="color: var(--text-muted); font-size: 12px;">Team:</span>
+                <select onchange="switchTeam(this.value)">
+                    {% for t in teams %}
+                    <option value="{{ t.name }}" {% if t.name == current_team %}selected{% endif %}>
+                        {{ t.display_name or t.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </div>
+        <div class="navbar-links">
+            <a href="/">Projects</a>
+            {% if user %}
+            <a href="/settings">Settings</a>
+            <span class="username" style="color: var(--text-secondary); font-size: 13px;">{{ user.username }}</span>
+            <a href="#" onclick="doLogout()" style="color: var(--danger); font-size: 13px;">Logout</a>
+            {% else %}
+            <a href="/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container fade-in">
+        <!-- 页面标题 -->
+        <div class="page-header">
+            <div>
+                <h1>{% if current_team %}{{ current_team }} Projects{% else %}All Projects{% endif %}</h1>
+                <div class="subtitle">Manage and explore your ML experiment projects</div>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ projects|length }}</div>
+                <div class="stat-label">Total Projects</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalRuns">0</div>
+                <div class="stat-label">Total Runs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="runningRuns">-</div>
+                <div class="stat-label">Active Runs</div>
+            </div>
+        </div>
+
+        {% if projects %}
+        <!-- 搜索栏 -->
+        <div class="toolbar">
+            <input type="text" class="search-input" id="searchInput"
+                   placeholder="Search projects..." oninput="filterProjects()">
+        </div>
+
+        <!-- 项目卡片 -->
+        <div class="project-grid" id="projectGrid">
+            {% for project in projects %}
+            <a href="/projects/{{ project.entity }}/{{ project.name }}" class="project-card" data-name="{{ project.name }}">
+                <h3>
+                    {{ project.name }}
+                    {% if project.visibility == 'public' %}
+                    <span class="visibility-badge vis-public">public</span>
+                    {% elif project.visibility == 'private' %}
+                    <span class="visibility-badge vis-private">private</span>
+                    {% endif %}
+                </h3>
+                <p style="color: var(--text-secondary); font-size: 14px;">
+                    {{ project.description or 'No description' }}
+                </p>
+                <div class="project-meta">
+                    <span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        {{ project.run_count }} runs
+                    </span>
+                    <span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        {{ project.created_at[:10] }}
+                    </span>
+                    <span style="color: var(--text-muted);">{{ project.entity }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- 空状态 -->
+        <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            <h3>No projects yet</h3>
+            <p>Start logging experiments and they'll appear here. Use the wandb SDK with this server:</p>
+            <code>
+export WANDB_BASE_URL=http://localhost:8080<br>
+export WANDB_API_KEY=local0000000000000000000000000000000000000000<br>
+<br>
+import wandb<br>
+wandb.init(project="my-project")<br>
+wandb.log({"loss": 0.5})
+            </code>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // 计算总运行数
+        const totalRuns = {{ projects | sum(attribute='run_count') }};
+        document.getElementById('totalRuns').textContent = totalRuns;
+
+        // 搜索过滤
+        function filterProjects() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            document.querySelectorAll('.project-card').forEach(card => {
+                const name = card.dataset.name.toLowerCase();
+                card.style.display = name.includes(query) ? '' : 'none';
+            });
+        }
+
+        // 团队切换
+        function switchTeam(teamName) {
+            window.location.href = '/?team=' + encodeURIComponent(teamName);
+        }
+
+        // 登出
+        async function doLogout() {
+            await fetch('/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

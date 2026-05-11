@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project.name }} - OpenWandb</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .share-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        .share-modal.active { display: flex; }
+        .share-modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .share-modal-content h3 { margin-bottom: 16px; }
+        .share-url {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .share-url input {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 13px;
+        }
+        .visibility-select {
+            padding: 4px 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
+        </a>
+        <div class="navbar-links">
+            <a href="/">Projects</a>
+            <a href="/compare/{{ entity }}/{{ project.name }}">Compare Runs</a>
+            {% if user %}
+            <a href="/settings">Settings</a>
+            <span style="color: var(--text-secondary); font-size: 13px;">{{ user.username }}</span>
+            <a href="#" onclick="doLogout()" style="color: var(--danger); font-size: 13px;">Logout</a>
+            {% else %}
+            <a href="/login" class="btn btn-sm btn-primary" style="color: #1a1a2e;">Login</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="breadcrumb">
+        <a href="/">Projects</a>
+        <span>/</span>
+        <a href="/projects/{{ entity }}/{{ project.name }}">{{ entity }} / {{ project.name }}</a>
+    </div>
+
+    <div class="container fade-in">
+        <div class="page-header">
+            <div>
+                <h1>{{ project.name }}</h1>
+                <div class="subtitle">
+                    {{ entity }} &middot; {{ runs|length }} runs
+                    {% if project.visibility %}
+                    &middot;
+                    <span class="badge" style="font-size: 11px; padding: 1px 6px;">{{ project.visibility }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                {% if can_write %}
+                <select class="visibility-select" onchange="changeVisibility(this.value)">
+                    <option value="private" {% if project.visibility == 'private' %}selected{% endif %}>Private</option>
+                    <option value="team" {% if project.visibility == 'team' %}selected{% endif %}>Team</option>
+                    <option value="public" {% if project.visibility == 'public' %}selected{% endif %}>Public</option>
+                </select>
+                <button class="btn btn-sm" onclick="openShareModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                    </svg>
+                    Share
+                </button>
+                {% endif %}
+                <a href="/compare/{{ entity }}/{{ project.name }}" class="btn btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    Compare Runs
+                </a>
+            </div>
+        </div>
+
+        <!-- 统计 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ runs|length }}</div>
+                <div class="stat-label">Total Runs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="color: var(--info);">
+                    {{ runs|selectattr('state', 'equalto', 'running')|list|length }}
+                </div>
+                <div class="stat-label">Running</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="color: var(--success);">
+                    {{ runs|selectattr('state', 'equalto', 'finished')|list|length }}
+                </div>
+                <div class="stat-label">Finished</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="color: var(--danger);">
+                    {{ runs|selectattr('state', 'equalto', 'failed')|list|length + runs|selectattr('state', 'equalto', 'crashed')|list|length }}
+                </div>
+                <div class="stat-label">Failed</div>
+            </div>
+        </div>
+
+        {% if runs %}
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <input type="text" class="search-input" id="searchInput"
+                   placeholder="Search runs..." oninput="filterRuns()">
+            <select id="stateFilter" onchange="filterRuns()">
+                <option value="">All States</option>
+                <option value="running">Running</option>
+                <option value="finished">Finished</option>
+                <option value="failed">Failed</option>
+                <option value="crashed">Crashed</option>
+            </select>
+        </div>
+
+        <!-- 运行表格 -->
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">Name</th>
+                        <th onclick="sortTable(1)">State</th>
+                        <th onclick="sortTable(2)">Created</th>
+                        <th>Tags</th>
+                        <th>Key Metrics</th>
+                        <th>Config</th>
+                    </tr>
+                </thead>
+                <tbody id="runsTable">
+                    {% for run in runs %}
+                    <tr data-name="{{ run.display_name }}" data-state="{{ run.state }}">
+                        <td>
+                            <a href="/runs/{{ entity }}/{{ project.name }}/{{ run.run_id }}">
+                                <strong>{{ run.display_name or run.run_id }}</strong>
+                            </a>
+                            <div style="font-size: 11px; color: var(--text-muted); font-family: var(--mono);">
+                                {{ run.run_id }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-{{ run.state }}">
+                                {% if run.state == 'running' %}<span class="pulse"></span>{% endif %}
+                                {{ run.state }}
+                            </span>
+                        </td>
+                        <td style="white-space: nowrap; font-size: 13px; color: var(--text-secondary);">
+                            {{ run.created_at[:19].replace('T', ' ') }}
+                        </td>
+                        <td>
+                            {% for tag in run.tags[:3] %}
+                            <span class="tag">{{ tag }}</span>
+                            {% endfor %}
+                        </td>
+                        <td style="font-family: var(--mono); font-size: 12px;">
+                            {% for key, val in run.latest_metrics.items() %}
+                                {% if loop.index <= 3 %}
+                                <div>{{ key }}: <span style="color: var(--accent);">{{ "%.4f"|format(val.value) }}</span></div>
+                                {% endif %}
+                            {% endfor %}
+                            {% if not run.latest_metrics %}
+                            <span style="color: var(--text-muted);">-</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-family: var(--mono); font-size: 11px; max-width: 200px; overflow: hidden;">
+                            {% for key, val in run.config.items() %}
+                                {% if loop.index <= 3 and not key.startswith('_') %}
+                                <div>{{ key }}: <span style="color: var(--info);">{{ val }}</span></div>
+                                {% endif %}
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <h3>No runs yet</h3>
+            <p>Start a training run pointed at this project to see results here.</p>
+            <code>
+import wandb<br>
+wandb.init(project="{{ project.name }}")<br>
+wandb.log({"loss": 0.5, "accuracy": 0.8})
+            </code>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 分享弹窗 -->
+    <div class="share-modal" id="shareModal" onclick="if(event.target===this)closeShareModal()">
+        <div class="share-modal-content">
+            <h3>Share Project</h3>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
+                Generate a public link that anyone can use to view this project (read-only).
+            </p>
+            <button class="btn btn-primary" onclick="generateShareLink()" id="shareBtn">Generate Share Link</button>
+            <div class="share-url" id="shareUrlBox" style="display: none;">
+                <input type="text" id="shareUrlInput" readonly>
+                <button class="btn btn-sm" onclick="copyShareUrl()">Copy</button>
+            </div>
+            <div style="margin-top: 16px; text-align: right;">
+                <button class="btn btn-sm" onclick="closeShareModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PROJECT_ID = {{ project.id }};
+
+        function filterRuns() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const stateFilter = document.getElementById('stateFilter').value;
+            document.querySelectorAll('#runsTable tr').forEach(row => {
+                const name = row.dataset.name.toLowerCase();
+                const state = row.dataset.state;
+                const matchName = name.includes(query);
+                const matchState = !stateFilter || state === stateFilter;
+                row.style.display = (matchName && matchState) ? '' : 'none';
+            });
+        }
+
+        let sortDirection = {};
+        function sortTable(colIndex) {
+            const table = document.getElementById('runsTable');
+            const rows = Array.from(table.querySelectorAll('tr'));
+            sortDirection[colIndex] = !sortDirection[colIndex];
+            rows.sort((a, b) => {
+                const aText = a.cells[colIndex].textContent.trim();
+                const bText = b.cells[colIndex].textContent.trim();
+                return sortDirection[colIndex]
+                    ? aText.localeCompare(bText)
+                    : bText.localeCompare(aText);
+            });
+            rows.forEach(row => table.appendChild(row));
+        }
+
+        // 分享功能
+        function openShareModal() {
+            document.getElementById('shareModal').classList.add('active');
+        }
+        function closeShareModal() {
+            document.getElementById('shareModal').classList.remove('active');
+        }
+
+        async function generateShareLink() {
+            const btn = document.getElementById('shareBtn');
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            try {
+                const resp = await fetch('/api/v2/share', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({resource_type: 'project', resource_id: PROJECT_ID})
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    const url = window.location.origin + '/s/' + data.share_link.token;
+                    document.getElementById('shareUrlInput').value = url;
+                    document.getElementById('shareUrlBox').style.display = 'flex';
+                } else {
+                    alert(data.detail || 'Failed to create share link');
+                }
+            } catch (err) {
+                alert('Network error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Generate Share Link';
+            }
+        }
+
+        function copyShareUrl() {
+            const input = document.getElementById('shareUrlInput');
+            navigator.clipboard.writeText(input.value);
+        }
+
+        async function changeVisibility(val) {
+            try {
+                await fetch(`/api/v2/projects/${PROJECT_ID}/visibility`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({visibility: val})
+                });
+            } catch (err) {
+                alert('Failed to update visibility');
+            }
+        }
+
+        async function doLogout() {
+            await fetch('/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

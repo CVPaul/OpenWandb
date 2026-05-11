@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenWandb - Team: {{ team.display_name or team.name }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .team-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .team-header h1 { font-size: 24px; }
+        .team-header .team-slug {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .member-table { width: 100%; }
+        .member-table td { padding: 12px 16px; }
+        .member-table .role-select {
+            padding: 4px 8px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+        .invite-form {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .invite-form input {
+            padding: 8px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            width: 240px;
+        }
+        .invite-form input:focus { border-color: var(--accent); }
+        .invite-form select {
+            padding: 8px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        .role-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .role-owner { background: rgba(240, 180, 41, 0.15); color: var(--accent); }
+        .role-admin { background: rgba(0, 207, 232, 0.15); color: var(--info); }
+        .role-member { background: rgba(40, 199, 111, 0.15); color: var(--success); }
+        .role-viewer { background: rgba(160, 160, 176, 0.15); color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
+        </a>
+        <div class="navbar-links">
+            <a href="/">Projects</a>
+            <a href="/settings">Settings</a>
+            <span style="color: var(--text-secondary); font-size: 14px;">{{ user.username }}</span>
+            <a href="#" onclick="doLogout()" style="color: var(--danger);">Logout</a>
+        </div>
+    </nav>
+
+    <div class="breadcrumb">
+        <a href="/">Home</a> <span>/</span>
+        <a href="/settings">Settings</a> <span>/</span>
+        <span style="color: var(--text-primary);">Team: {{ team.name }}</span>
+    </div>
+
+    <div class="container fade-in">
+        <div class="team-header">
+            <div>
+                <h1>{{ team.display_name or team.name }}</h1>
+                <div class="team-slug">@{{ team.name }} · Your role: <span class="role-badge role-{{ my_role }}">{{ my_role }}</span></div>
+            </div>
+        </div>
+
+        <!-- 成员管理 -->
+        <div class="section-title">
+            Members ({{ members|length }})
+        </div>
+
+        {% if my_role in ('admin', 'owner') %}
+        <div class="invite-form">
+            <input type="text" id="inviteUsername" placeholder="Username to invite">
+            <select id="inviteRole">
+                <option value="member">Member</option>
+                <option value="viewer">Viewer</option>
+                <option value="admin">Admin</option>
+            </select>
+            <button class="btn btn-primary" onclick="inviteMember()">Invite</button>
+        </div>
+        {% endif %}
+
+        <div class="table-wrapper">
+            <table class="member-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Joined</th>
+                        {% if my_role in ('admin', 'owner') %}
+                        <th>Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in members %}
+                    <tr id="member-{{ m.id }}">
+                        <td>
+                            <strong>{{ m.display_name or m.username }}</strong>
+                            <span style="color: var(--text-muted); font-size: 12px; margin-left: 8px;">@{{ m.username }}</span>
+                        </td>
+                        <td>
+                            <span class="role-badge role-{{ m.role }}">{{ m.role }}</span>
+                        </td>
+                        <td style="color: var(--text-secondary); font-size: 13px;">{{ m.joined_at[:10] }}</td>
+                        {% if my_role in ('admin', 'owner') %}
+                        <td>
+                            {% if m.role != 'owner' %}
+                            <select class="role-select" onchange="updateRole({{ m.id }}, this.value)" {% if m.id == user.id %}disabled{% endif %}>
+                                <option value="viewer" {% if m.role == 'viewer' %}selected{% endif %}>Viewer</option>
+                                <option value="member" {% if m.role == 'member' %}selected{% endif %}>Member</option>
+                                <option value="admin" {% if m.role == 'admin' %}selected{% endif %}>Admin</option>
+                            </select>
+                            {% if m.id != user.id %}
+                            <button class="btn btn-sm btn-danger" onclick="removeMember({{ m.id }})" style="margin-left: 8px;">Remove</button>
+                            {% endif %}
+                            {% else %}
+                            <span style="color: var(--text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 团队项目 -->
+        <div class="section-title" style="margin-top: 32px;">
+            Projects ({{ projects|length }})
+        </div>
+
+        {% if projects %}
+        <div class="project-grid">
+            {% for project in projects %}
+            <a href="/projects/{{ team.name }}/{{ project.name }}" class="project-card">
+                <h3>{{ project.name }}</h3>
+                <p style="color: var(--text-secondary); font-size: 14px;">
+                    {{ project.description or 'No description' }}
+                </p>
+                <div class="project-meta">
+                    <span>{{ project.run_count }} runs</span>
+                    <span>
+                        <span class="badge" style="font-size: 11px; padding: 1px 6px;">{{ project.visibility }}</span>
+                    </span>
+                    <span>{{ project.created_at[:10] }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: 40px;">
+            <h3>No projects yet</h3>
+            <p>Use wandb SDK to create projects in this team.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        const TEAM = '{{ team.name }}';
+
+        async function inviteMember() {
+            const username = document.getElementById('inviteUsername').value.trim();
+            const role = document.getElementById('inviteRole').value;
+            if (!username) { alert('Please enter a username'); return; }
+
+            try {
+                const resp = await fetch(`/api/v2/teams/${TEAM}/members`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, role})
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    location.reload();
+                } else {
+                    alert(data.detail || 'Failed to invite member');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        async function updateRole(userId, newRole) {
+            try {
+                const resp = await fetch(`/api/v2/teams/${TEAM}/members/${userId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({role: newRole})
+                });
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    alert(data.detail || 'Failed to update role');
+                    location.reload();
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        async function removeMember(userId) {
+            if (!confirm('Remove this member from the team?')) return;
+            try {
+                const resp = await fetch(`/api/v2/teams/${TEAM}/members/${userId}`, {method: 'DELETE'});
+                if (resp.ok) {
+                    document.getElementById('member-' + userId).remove();
+                } else {
+                    alert('Failed to remove member');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        async function doLogout() {
+            await fetch('/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

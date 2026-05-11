@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenWandb - Settings</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 24px;
+        }
+        .settings-nav {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px;
+            height: fit-content;
+            position: sticky;
+            top: 80px;
+        }
+        .settings-nav a {
+            display: block;
+            padding: 10px 14px;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .settings-nav a:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .settings-nav a.active { background: var(--bg-hover); color: var(--accent); }
+        .settings-section { margin-bottom: 32px; }
+        .settings-section h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+        .settings-section .description {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .key-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .key-info h4 { font-size: 15px; margin-bottom: 4px; }
+        .key-info .key-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 16px;
+        }
+        .key-prefix {
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--accent);
+            background: var(--bg-input);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .new-key-display {
+            background: var(--bg-input);
+            border: 1px solid var(--accent);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .new-key-display .warning {
+            color: var(--warning);
+            font-size: 13px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .new-key-display .key-value {
+            font-family: var(--mono);
+            font-size: 14px;
+            color: var(--accent);
+            background: var(--bg-primary);
+            padding: 10px 14px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            word-break: break-all;
+        }
+        .new-key-display .key-value button {
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 12px;
+        }
+        .btn-danger {
+            background: rgba(234, 84, 85, 0.15);
+            color: var(--danger);
+            border: 1px solid rgba(234, 84, 85, 0.3);
+        }
+        .btn-danger:hover { background: rgba(234, 84, 85, 0.25); }
+        .profile-form .form-group { margin-bottom: 16px; }
+        .profile-form label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+        .profile-form input {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+        }
+        .profile-form input:focus { border-color: var(--accent); }
+        .profile-form input:disabled { opacity: 0.6; }
+        .team-list { list-style: none; }
+        .team-list li {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .team-list li:last-child { border-bottom: none; }
+        .team-role {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+        @media (max-width: 768px) {
+            .settings-grid { grid-template-columns: 1fr; }
+            .settings-nav { position: static; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
+        </a>
+        <div class="navbar-links">
+            <a href="/">Projects</a>
+            <span style="color: var(--text-secondary); font-size: 14px;">{{ user.username }}</span>
+            <a href="#" onclick="doLogout()" style="color: var(--danger);">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container fade-in">
+        <div class="settings-grid">
+            <!-- 左侧导航 -->
+            <div class="settings-nav">
+                <a href="#profile" class="active" onclick="showSection('profile')">Profile</a>
+                <a href="#api-keys" onclick="showSection('api-keys')">API Keys</a>
+                <a href="#teams" onclick="showSection('teams')">Teams</a>
+            </div>
+
+            <!-- 右侧内容 -->
+            <div>
+                <!-- Profile -->
+                <div id="section-profile" class="settings-section">
+                    <h2>Profile</h2>
+                    <p class="description">Manage your account information</p>
+                    <div class="profile-form">
+                        <div class="form-group">
+                            <label>Username</label>
+                            <input type="text" value="{{ user.username }}" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label>Display Name</label>
+                            <input type="text" value="{{ user.display_name or '' }}" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label>Default Team</label>
+                            <input type="text" value="{{ user.entity or 'default' }}" disabled>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Keys -->
+                <div id="section-api-keys" class="settings-section" style="display:none;">
+                    <h2>API Keys</h2>
+                    <p class="description">API Keys are used to authenticate with the wandb SDK. Set <code style="color:var(--accent);">WANDB_API_KEY</code> in your environment.</p>
+
+                    <div id="newKeyDisplay" class="new-key-display">
+                        <div class="warning">⚠ Copy this key now — it won't be shown again!</div>
+                        <div class="key-value">
+                            <span id="newKeyValue"></span>
+                            <button onclick="copyKey()">Copy</button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="createApiKey()" style="margin-bottom: 16px;">
+                        + Create New API Key
+                    </button>
+
+                    <div id="keysList">
+                        {% for key in api_keys %}
+                        <div class="key-item" id="key-{{ key.id }}">
+                            <div class="key-info">
+                                <h4>{{ key.name }}</h4>
+                                <div class="key-meta">
+                                    <span>Prefix: <span class="key-prefix">{{ key.key_prefix }}...</span></span>
+                                    <span>Created: {{ key.created_at[:10] }}</span>
+                                    {% if key.last_used %}
+                                    <span>Last used: {{ key.last_used[:10] }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-danger" onclick="deleteKey({{ key.id }})">Delete</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Teams -->
+                <div id="section-teams" class="settings-section" style="display:none;">
+                    <h2>My Teams</h2>
+                    <p class="description">Teams you belong to. Click a team name to manage it.</p>
+
+                    <div class="panel">
+                        <ul class="team-list">
+                            {% for team in teams %}
+                            <li>
+                                <a href="/teams/{{ team.name }}">
+                                    <strong>{{ team.display_name or team.name }}</strong>
+                                    <span style="color: var(--text-muted); font-size: 13px; margin-left: 8px;">({{ team.name }})</span>
+                                </a>
+                                <span class="team-role">{{ team.role }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <button class="btn" onclick="showCreateTeam()" style="margin-top: 12px;">+ Create New Team</button>
+
+                    <div id="createTeamForm" style="display:none; margin-top: 16px;">
+                        <div class="panel">
+                            <div class="panel-body">
+                                <div class="profile-form">
+                                    <div class="form-group">
+                                        <label>Team Name (lowercase, no spaces)</label>
+                                        <input type="text" id="newTeamName" placeholder="my-team">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Display Name</label>
+                                        <input type="text" id="newTeamDisplay" placeholder="My Team">
+                                    </div>
+                                    <button class="btn btn-primary" onclick="createTeam()">Create</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showSection(section) {
+            document.querySelectorAll('.settings-section').forEach(s => s.style.display = 'none');
+            document.querySelectorAll('.settings-nav a').forEach(a => a.classList.remove('active'));
+            document.getElementById('section-' + section).style.display = 'block';
+            event.target.classList.add('active');
+        }
+
+        async function createApiKey() {
+            const name = prompt('API Key name:', 'default');
+            if (!name) return;
+            try {
+                const resp = await fetch('/api/v2/settings/api-keys', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    document.getElementById('newKeyValue').textContent = data.api_key.key;
+                    document.getElementById('newKeyDisplay').style.display = 'block';
+                    // 刷新列表
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    alert(data.detail || 'Failed to create API key');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        function copyKey() {
+            const key = document.getElementById('newKeyValue').textContent;
+            navigator.clipboard.writeText(key).then(() => {
+                event.target.textContent = 'Copied!';
+                setTimeout(() => event.target.textContent = 'Copy', 2000);
+            });
+        }
+
+        async function deleteKey(keyId) {
+            if (!confirm('Delete this API key? This cannot be undone.')) return;
+            try {
+                const resp = await fetch(`/api/v2/settings/api-keys/${keyId}`, {method: 'DELETE'});
+                if (resp.ok) {
+                    document.getElementById('key-' + keyId).remove();
+                } else {
+                    alert('Failed to delete key');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        function showCreateTeam() {
+            document.getElementById('createTeamForm').style.display = 'block';
+        }
+
+        async function createTeam() {
+            const name = document.getElementById('newTeamName').value.trim().toLowerCase();
+            const displayName = document.getElementById('newTeamDisplay').value.trim();
+            if (!name) { alert('Team name is required'); return; }
+
+            try {
+                const resp = await fetch('/api/v2/teams', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, display_name: displayName || name})
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    location.reload();
+                } else {
+                    alert(data.detail || 'Failed to create team');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        async function doLogout() {
+            await fetch('/api/v2/auth/logout', {method: 'POST'});
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>
