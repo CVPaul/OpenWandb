@@ -1,5 +1,5 @@
 """
-OpenWandb v0.2 — FastAPI 主服务
+OpenWandb v0.3 — FastAPI 主服务
 多租户隔离 + 分享 + 完整 API
 
 路由组:
@@ -14,8 +14,6 @@ OpenWandb v0.2 — FastAPI 主服务
 import json
 import logging
 import os
-import sys
-from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException
@@ -24,13 +22,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from strawberry.fastapi import GraphQLRouter
 
-import auth
-import database as db
-import file_stream
-import storage
-from config import (HOST, PORT, DEFAULT_TEAM_NAME, ALLOW_REGISTRATION,
-                    DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD)
-from graphql_schema import schema
+from openwandb import auth
+from openwandb import database as db
+from openwandb import file_stream
+from openwandb import storage
+from openwandb.config import (HOST, PORT, DEFAULT_TEAM_NAME, ALLOW_REGISTRATION,
+                              DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD,
+                              TEMPLATES_DIR, STATIC_DIR)
+from openwandb.graphql_schema import schema
 
 # ─────────────────────────────────────────────
 # 日志配置
@@ -48,13 +47,12 @@ logger = logging.getLogger("openwandb")
 app = FastAPI(
     title="OpenWandb",
     description="开源 WandB 兼容服务器 — 多租户版",
-    version="0.2.0"
+    version="0.3.0"
 )
 
-# 静态文件与模板
-BASE_DIR = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# 静态文件与模板 (从包内资源路径加载)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 # ─────────────────────────────────────────────
@@ -826,7 +824,7 @@ async def share_page(request: Request, token: str):
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)
-    logger.info("  OpenWandb v0.2 Server starting...")
+    logger.info("  OpenWandb v0.3 Server starting...")
     logger.info("=" * 60)
     db.init_db()
     logger.info(f"  Database initialized at {db.DB_PATH}")

@@ -10,7 +10,7 @@ import uuid
 from contextlib import contextmanager
 from typing import Optional
 
-from config import DB_PATH
+from openwandb.config import DB_PATH
 
 
 # ─────────────────────────────────────────────
@@ -188,7 +188,7 @@ CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
 def init_db():
     """初始化数据库并创建默认管理员和团队"""
     import bcrypt
-    from config import DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, DEFAULT_TEAM_NAME
+    from openwandb.config import DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, DEFAULT_TEAM_NAME
 
     conn = sqlite3.connect(str(DB_PATH))
     conn.executescript(_SCHEMA)

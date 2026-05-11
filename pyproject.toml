@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openwandb"
+version = "0.3.0"
+description = "Open-source WandB-compatible server with multi-tenant support"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "OpenWandb Contributors" },
+]
+keywords = ["wandb", "mlops", "experiment-tracking", "machine-learning"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "strawberry-graphql[fastapi]>=0.215.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.6",
+    "pyyaml>=6.0",
+    "aiosqlite>=0.19.0",
+    "pyjwt>=2.8.0",
+    "bcrypt>=4.0.0",
+    "click>=8.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/CVPaul/OpenWandb"
+Repository = "https://github.com/CVPaul/OpenWandb"
+Issues = "https://github.com/CVPaul/OpenWandb/issues"
+
+[project.scripts]
+openwandb = "openwandb.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openwandb"]

@@ -13,8 +13,8 @@ from strawberry.scalars import JSON
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
-import database as db
-from config import DEFAULT_TEAM_NAME
+from openwandb import database as db
+from openwandb.config import DEFAULT_TEAM_NAME
 
 logger = logging.getLogger("openwandb.graphql")
 

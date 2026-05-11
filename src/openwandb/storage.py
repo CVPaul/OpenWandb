@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from config import ARTIFACTS_DIR, FILES_DIR
+from openwandb.config import ARTIFACTS_DIR, FILES_DIR
 
 
 def get_run_files_dir(entity: str, project: str, run_id: str) -> Path:

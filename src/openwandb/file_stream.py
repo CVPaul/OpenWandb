@@ -8,8 +8,8 @@ import logging
 import time
 from typing import Any
 
-import database as db
-import storage
+from openwandb import database as db
+from openwandb import storage
 
 logger = logging.getLogger("openwandb.file_stream")
 

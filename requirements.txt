@@ -1,3 +1,6 @@
+# Dependencies are managed in pyproject.toml
+# This file is kept for backward compatibility
+# Preferred: pip install openwandb  (or pip install -e . for dev)
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 strawberry-graphql[fastapi]>=0.215.0
@@ -7,3 +10,4 @@ pyyaml>=6.0
 aiosqlite>=0.19.0
 pyjwt>=2.8.0
 bcrypt>=4.0.0
+click>=8.0.0

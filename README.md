@@ -4,42 +4,49 @@
 
 用户只需设置 `WANDB_BASE_URL` 环境变量，即可将现有训练代码**无缝迁移**到自建服务器，无需修改任何训练脚本。
 
-## v0.2 新特性
+## 核心特性
 
+- **完全兼容 wandb Python SDK** — 实现 GraphQL API + File Stream 协议
+- **pip install 一键部署** — `pip install openwandb && openwandb serve`
+- **CLI 管理工具** — `openwandb serve / init / version`
 - **多租户隔离** — Team → Project → Run 三级权限继承
 - **用户管理** — 注册/登录、JWT + API Key 双模认证
 - **团队协作** — 创建团队、邀请成员、角色管理 (Owner/Admin/Member/Viewer)
 - **分享功能** — 项目/运行级别的 Token 分享链接
-- **项目可见性** — Private / Team / Public 三级可见性控制
-- **API Key 管理** — 创建/删除/查看 API Key，支持 wandb SDK 认证
-
-## 核心特性
-
-- **完全兼容 wandb Python SDK** — 实现 GraphQL API + File Stream 协议
-- **Web 可视化仪表盘** — 项目管理、运行详情、指标图表、运行对比
-- **零配置部署** — SQLite 数据库 + 本地文件存储，单命令启动
-- **深色主题 UI** — 专业的深色主题界面，ECharts 图表引擎
-- **轻量级** — 纯 Python 实现，无需 Docker/K8s
+- **Web 可视化仪表盘** — 深色主题 UI，ECharts 图表引擎
+- **零配置** — SQLite 数据库 + 本地文件存储，无需 Docker/K8s
 
 ## 快速开始
 
-### 1. 安装依赖
+### 方式一: pip install (推荐)
 
 ```bash
-pip install -r requirements.txt
+pip install openwandb
+
+# 启动服务 (数据默认存储在 ~/.openwandb/)
+openwandb serve
+
+# 自定义端口和数据目录
+openwandb serve --port 9090 --data-dir /data/openwandb
 ```
 
-### 2. 启动服务
+### 方式二: 源码运行 (开发模式)
 
 ```bash
+git clone https://github.com/CVPaul/OpenWandb.git
+cd OpenWandb
+
+# 开发模式安装
+pip install -e .
+openwandb serve
+
+# 或直接运行 (数据存储在 ./data/)
 python run_server.py
 ```
 
-服务默认运行在 `http://localhost:8080`
+服务默认运行在 `http://localhost:8080`，默认管理员账号: `admin` / `admin123`
 
-默认管理员账号: `admin` / `admin123`
-
-### 3. 配置训练脚本
+### 配置训练脚本
 
 只需设置两个环境变量：
 
@@ -62,11 +69,7 @@ for step in range(100):
 wandb.finish()
 ```
 
-### 4. 查看结果
-
-打开浏览器访问 `http://localhost:8080` 查看 Web 仪表盘。
-
-### 5. 管理 API Key
+### 管理 API Key
 
 1. 登录 Web UI → Settings → API Keys
 2. 创建新的 API Key
@@ -74,6 +77,27 @@ wandb.finish()
    ```bash
    export WANDB_API_KEY=local-xxxxxxxxxxxxxxxxxxxx
    ```
+
+## CLI 命令
+
+```bash
+# 启动服务器
+openwandb serve [OPTIONS]
+  --host TEXT          监听地址 (默认: 0.0.0.0)
+  --port/-p INT        端口 (默认: 8080)
+  --data-dir PATH      数据目录 (默认: ~/.openwandb)
+  --log-level TEXT     日志级别: debug/info/warning/error
+  --reload             开发模式热重载
+
+# 初始化数据目录和数据库
+openwandb init [--data-dir PATH]
+
+# 显示版本
+openwandb version
+
+# 也支持 python -m 方式运行
+python -m openwandb serve
+```
 
 ## 多租户使用
 
@@ -109,10 +133,10 @@ wandb.init(project="my-project", entity="my-team")
 
 ```bash
 # 终端 1: 启动服务器
-python run_server.py
+openwandb serve
 
 # 终端 2: 运行模拟训练
-python example_train.py
+python examples/example_train.py
 ```
 
 ### MLP 真实训练 (MNIST 手写数字识别)
@@ -124,13 +148,13 @@ python example_train.py
 pip install torch torchvision
 
 # 终端 1: 启动服务器
-python run_server.py
+openwandb serve
 
 # 终端 2: 运行训练 (默认参数)
-python example_mlp.py
+python examples/example_mlp.py
 
 # 修改超参数再跑一次, 然后在 Web UI 中对比两次实验!
-python example_mlp.py --lr 0.01 --hidden 128 --optimizer sgd --epochs 10
+python examples/example_mlp.py --lr 0.01 --hidden 128 --optimizer sgd --epochs 10
 ```
 
 脚本会自动下载 MNIST 数据集、训练模型、并将所有指标上传到 OpenWandb。
@@ -212,6 +236,7 @@ python example_mlp.py --lr 0.01 --hidden 128 --optimizer sgd --epochs 10
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
+| `OPENWANDB_DATA_DIR` | `~/.openwandb` | 数据存储目录 |
 | `OPENWANDB_HOST` | `0.0.0.0` | 监听地址 |
 | `OPENWANDB_PORT` | `8080` | 监听端口 |
 | `OPENWANDB_JWT_SECRET` | 随机生成 | JWT 签名密钥 |
@@ -270,31 +295,25 @@ Run → 继承所属 Project 的权限
 
 ```
 open-wandb/
-├── server.py              # FastAPI 主入口 + 所有路由
-├── database.py            # SQLite 数据库 + 多租户权限
-├── graphql_schema.py      # GraphQL schema (wandb SDK 兼容)
-├── file_stream.py         # file_stream 处理
-├── storage.py             # 文件存储管理
-├── auth.py                # JWT + API Key 双模认证
-├── config.py              # 服务配置
-├── run_server.py          # 启动脚本
-├── example_train.py       # 示例训练脚本
-├── requirements.txt       # Python 依赖
-├── templates/             # Web UI 模板
-│   ├── index.html         # 首页 (团队切换器)
-│   ├── project.html       # 项目详情 (分享/可见性)
-│   ├── run.html           # 运行详情 (分享)
-│   ├── compare.html       # 运行对比
-│   ├── login.html         # 登录/注册
-│   ├── settings.html      # 用户设置 (API Key)
-│   └── team.html          # 团队管理
-├── static/
-│   └── style.css          # 全局样式
-├── data/                  # 数据目录 (自动创建)
-│   ├── openwandb.db       # SQLite 数据库
-│   ├── files/             # 运行文件
-│   └── artifacts/         # Artifact 存储
-├── LICENSE                # MIT License
+├── pyproject.toml             # 包配置 (pip install)
+├── run_server.py              # 开发模式启动脚本
+├── examples/
+│   ├── example_train.py       # 模拟训练示例
+│   └── example_mlp.py         # MNIST MLP 真实训练示例
+├── src/openwandb/             # Python 包
+│   ├── __init__.py            # 版本号
+│   ├── __main__.py            # python -m openwandb
+│   ├── cli.py                 # CLI 命令 (serve/init/version)
+│   ├── config.py              # 服务配置 (路径/环境变量)
+│   ├── server.py              # FastAPI 主入口 + 所有路由
+│   ├── database.py            # SQLite 数据库 + 多租户权限
+│   ├── graphql_schema.py      # GraphQL schema (wandb SDK 兼容)
+│   ├── file_stream.py         # file_stream 处理
+│   ├── storage.py             # 文件存储管理
+│   ├── auth.py                # JWT + API Key 双模认证
+│   ├── templates/             # Web UI 模板 (7 页面)
+│   └── static/style.css       # 全局样式
+├── LICENSE                    # MIT License
 └── .gitignore
 ```
 

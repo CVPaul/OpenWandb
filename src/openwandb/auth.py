@@ -11,8 +11,8 @@ from typing import Optional
 import jwt
 from fastapi import Request, HTTPException, Response
 
-import database as db
-from config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_HOURS, DEFAULT_TEAM_NAME
+from openwandb import database as db
+from openwandb.config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_HOURS, DEFAULT_TEAM_NAME
 
 logger = logging.getLogger("openwandb.auth")
 
