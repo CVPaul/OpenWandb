@@ -163,14 +163,45 @@
                 return;
             }
 
-            keys.forEach((key, keyIdx) => {
-                const box = document.createElement('div');
-                box.className = 'chart-box';
-                box.innerHTML = `<h4>${key}</h4><div class="chart-container" id="compare-chart-${keyIdx}"></div>`;
-                container.appendChild(box);
+            // Group keys by namespace (prefix before "/")
+            const groups = {};
+            keys.forEach(key => {
+                const slashIdx = key.indexOf('/');
+                const group = slashIdx > 0 ? key.substring(0, slashIdx) : '';
+                if (!groups[group]) groups[group] = [];
+                groups[group].push(key);
+            });
+            const groupNames = Object.keys(groups).sort((a, b) => {
+                if (a === '' && b !== '') return 1;
+                if (a !== '' && b === '') return -1;
+                return a.localeCompare(b);
+            });
 
-                setTimeout(() => {
-                    const chartDom = document.getElementById(`compare-chart-${keyIdx}`);
+            let chartIdx = 0;
+            groupNames.forEach(groupName => {
+                // Section header for named groups
+                if (groupName) {
+                    const header = document.createElement('div');
+                    header.style.cssText = 'margin: 20px 0 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; border-left: 3px solid var(--accent);';
+                    header.textContent = groupName;
+                    if (chartIdx > 0) header.style.marginTop = '32px';
+                    container.appendChild(header);
+                }
+                const grid = document.createElement('div');
+                grid.className = 'chart-grid';
+                container.appendChild(grid);
+
+                groups[groupName].forEach(key => {
+                    const displayName = groupName ? key.substring(groupName.length + 1) : key;
+                    const box = document.createElement('div');
+                    box.className = 'chart-box';
+                    const cid = 'compare-chart-' + chartIdx;
+                    box.innerHTML = '<h4>' + displayName + '</h4><div class="chart-container" id="' + cid + '"></div>';
+                    grid.appendChild(box);
+                    const keyIdx = chartIdx;
+
+                    setTimeout(() => {
+                    const chartDom = document.getElementById('compare-chart-' + keyIdx);
                     const chart = echarts.init(chartDom);
                     charts.push(chart);
 
@@ -224,7 +255,9 @@
 
                     window.addEventListener('resize', () => chart.resize());
                 }, 50);
-            });
+                    chartIdx++;
+                }); // groups[groupName].forEach
+            }); // groupNames.forEach
         }
 
         function renderConfigComparison(runIds) {

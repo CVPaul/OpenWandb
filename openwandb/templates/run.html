@@ -105,17 +105,9 @@
 
         <!-- Charts Tab -->
         <div id="tab-charts" class="tab-content">
-            {% if metric_keys %}
-            <div class="chart-grid" id="chartGrid">
-                {% for key in metric_keys %}
-                <div class="chart-box">
-                    <h4>{{ key }}</h4>
-                    <div class="chart-container" id="chart-{{ loop.index }}"></div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="empty-state">
+            <div id="chartContainer"></div>
+            {% if not metric_keys %}
+            <div class="empty-state" id="chartEmpty">
                 <h3>No metrics logged yet</h3>
                 <p>Use wandb.log() to record metrics during training.</p>
             </div>
@@ -288,20 +280,73 @@
             return chart;
         }
 
-        // 加载指标图表
+        // 加载指标图表 — 按命名空间分组 (train/*, val/*, 其他)
         async function loadCharts() {
             if (!METRIC_KEYS.length) return;
             try {
                 const resp = await fetch(`{{ base_path }}/api/v2/runs/${RUN_ID}/metrics`);
                 const data = await resp.json();
-                METRIC_KEYS.forEach((key, idx) => {
-                    const container = document.getElementById(`chart-${idx + 1}`);
-                    if (!container) return;
-                    const metrics = data.metrics_by_key[key] || [];
-                    const steps = metrics.map(m => m.step);
-                    const values = metrics.map(m => m.value);
-                    const color = COLORS[idx % COLORS.length];
-                    createChart(container, key, steps, values, color);
+                const container = document.getElementById('chartContainer');
+                container.innerHTML = '';
+
+                // Group keys by namespace (prefix before "/")
+                const groups = {};
+                METRIC_KEYS.forEach(key => {
+                    const slashIdx = key.indexOf('/');
+                    const group = slashIdx > 0 ? key.substring(0, slashIdx) : '';
+                    if (!groups[group]) groups[group] = [];
+                    groups[group].push(key);
+                });
+
+                // Sort: named groups first (alphabetical), ungrouped last
+                const groupNames = Object.keys(groups).sort((a, b) => {
+                    if (a === '' && b !== '') return 1;
+                    if (a !== '' && b === '') return -1;
+                    return a.localeCompare(b);
+                });
+
+                let chartIdx = 0;
+                groupNames.forEach(groupName => {
+                    const keys = groups[groupName];
+
+                    // Section header for named groups
+                    if (groupName) {
+                        const header = document.createElement('div');
+                        header.style.cssText = 'margin: 20px 0 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; border-left: 3px solid var(--accent);';
+                        header.textContent = groupName;
+                        if (chartIdx > 0) header.style.marginTop = '32px';
+                        container.appendChild(header);
+                    }
+
+                    // Chart grid for this group
+                    const grid = document.createElement('div');
+                    grid.className = 'chart-grid';
+                    container.appendChild(grid);
+
+                    keys.forEach(key => {
+                        const metrics = data.metrics_by_key[key] || [];
+                        if (!metrics.length) return;
+                        const steps = metrics.map(m => m.step);
+                        const values = metrics.map(m => m.value);
+                        const color = COLORS[chartIdx % COLORS.length];
+
+                        // Display name: strip namespace prefix for grouped keys
+                        const displayName = groupName ? key.substring(groupName.length + 1) : key;
+
+                        const box = document.createElement('div');
+                        box.className = 'chart-box';
+                        const chartId = 'chart-dyn-' + chartIdx;
+                        box.innerHTML = '<h4>' + displayName + '</h4><div class="chart-container" id="' + chartId + '"></div>';
+                        grid.appendChild(box);
+
+                        // Defer chart init to after DOM insertion
+                        setTimeout(() => {
+                            const el = document.getElementById(chartId);
+                            if (el) createChart(el, key, steps, values, color);
+                        }, 20);
+
+                        chartIdx++;
+                    });
                 });
             } catch (err) {
                 console.error('Failed to load metrics:', err);

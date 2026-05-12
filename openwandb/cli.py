@@ -23,7 +23,7 @@ def _print_banner(host: str, port: int, data_dir: Path):
  | (_) | '_ \/ -_) ' \| |/\| / _` | ' \ ' \/ _` | '_ \
   \___/| .__/\___|_||_|__/\__\__,_|_||_|_||_\__,_|_.__/
        |_|
-    Open Source WandB Server v0.3.5
+    Open Source WandB Server v0.3.6
     Multi-tenant | Sharing | Team Management
     """)
     click.echo(f"  Data directory: {data_dir}")

@@ -48,7 +48,7 @@ logger = logging.getLogger("openwandb")
 app = FastAPI(
     title="OpenWandb",
     description="开源 WandB 兼容服务器 — 多租户版",
-    version="0.3.5",
+    version="0.3.6",
 )
 
 # 静态文件与模板 (从包内资源路径加载)
