@@ -13,6 +13,7 @@ OpenWandb v0.3 — FastAPI 主服务
 """
 import json
 import logging
+import mimetypes
 import os
 from typing import Optional
 
@@ -47,7 +48,7 @@ logger = logging.getLogger("openwandb")
 app = FastAPI(
     title="OpenWandb",
     description="开源 WandB 兼容服务器 — 多租户版",
-    version="0.3.4",
+    version="0.3.5",
 )
 
 # 静态文件与模板 (从包内资源路径加载)
@@ -119,7 +120,9 @@ async def get_file(entity: str, project: str, run_id: str, filename: str,
     content = storage.read_file(entity, project, run_id, filename)
     if content is None:
         raise HTTPException(status_code=404, detail="File not found")
-    return Response(content=content, media_type="application/octet-stream")
+    # Detect MIME type (critical for images to display in browser)
+    content_type, _ = mimetypes.guess_type(filename)
+    return Response(content=content, media_type=content_type or "application/octet-stream")
 
 
 @app.put("/files/{entity}/{project}/{run_id}/{filename:path}")

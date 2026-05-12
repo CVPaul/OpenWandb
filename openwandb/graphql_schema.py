@@ -353,7 +353,7 @@ class ServerInfoType:
     def latest_local_version_info(self) -> "VersionInfoType":
         return VersionInfoType(
             out_of_date=False,
-            latest_version_string="0.3.4"
+            latest_version_string="0.3.5"
         )
 
     @strawberry.field
@@ -372,8 +372,8 @@ class ServerInfoType:
 @strawberry.type
 class VersionInfoType:
     out_of_date: bool = False
-    latest_version_string: str = "0.3.4"
-    version_on_this_instance_string: str = "0.3.4"
+    latest_version_string: str = "0.3.5"
+    version_on_this_instance_string: str = "0.3.5"
 
 
 @strawberry.type

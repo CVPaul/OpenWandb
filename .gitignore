@@ -1,5 +1,7 @@
 # Data directory (auto-created, contains SQLite DB and uploaded files)
-data/
+/data/
+# But keep package data
+!openwandb/data/
 
 # wandb SDK local cache
 wandb/

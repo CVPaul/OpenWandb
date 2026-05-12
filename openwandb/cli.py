@@ -23,7 +23,7 @@ def _print_banner(host: str, port: int, data_dir: Path):
  | (_) | '_ \/ -_) ' \| |/\| / _` | ' \ ' \/ _` | '_ \
   \___/| .__/\___|_||_|__/\__\__,_|_||_|_||_\__,_|_.__/
        |_|
-    Open Source WandB Server v0.3.4
+    Open Source WandB Server v0.3.5
     Multi-tenant | Sharing | Team Management
     """)
     click.echo(f"  Data directory: {data_dir}")
@@ -124,8 +124,8 @@ def init(data_dir):
               help="OpenWandb server URL (default: http://localhost:8080)")
 @click.option("--api-key", default=None,
               help="API key (default: local0000...)")
-@click.option("--project", default="regression-demo",
-              help="Project name (default: regression-demo)")
+@click.option("--project", default="mnist-demo",
+              help="Project name (default: mnist-demo)")
 @click.option("--runs", default=3, type=int, help="Number of demo runs (default: 3)")
 @click.option("--epochs", default=30, type=int, help="Epochs per run (default: 30)")
 @click.option("--no-run", is_flag=True, default=False,
@@ -133,19 +133,23 @@ def init(data_dir):
 @click.option("--output", "-o", default="openwandb-demo.py", type=click.Path(),
               help="Output script path (default: openwandb-demo.py)")
 def demo(server_url, api_key, project, runs, epochs, no_run, output):
-    """Generate and run a professional ML training demo.
+    """Generate and run an MNIST digit classification demo.
 
     \b
-    Creates a self-contained demo script in the current directory and
-    executes it. The demo showcases wandb SDK features:
+    Uses PyTorch Lightning to train MLP classifiers on the bundled
+    MNIST dataset. The demo showcases wandb SDK features:
       • Config tracking & hyperparameter logging
-      • Real-time metric logging (loss, accuracy, R²)
+      • Real-time metric logging (loss, accuracy)
+      • wandb.Image — prediction samples with labels
+      • wandb.Table — prediction results comparison
+      • wandb.Artifact — model weight versioning
       • Namespace grouping (train/*, val/*)
-      • Learning rate scheduling with cosine annealing
-      • wandb.Table for prediction result comparison
-      • wandb.Artifact for model weight versioning
-      • Run comparison across different model architectures
+      • Cosine annealing learning rate schedule
+      • Multi-run comparison across architectures
       • Tags, notes, and group for organizing experiments
+
+    \b
+    Prerequisites: pip install torch lightning wandb
 
     \b
     Examples:
@@ -199,13 +203,28 @@ def demo(server_url, api_key, project, runs, epochs, no_run, output):
         click.echo()
         return
 
-    # 检查 wandb SDK 是否安装
+    # 检查依赖
+    missing = []
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        missing.append("torch")
+    try:
+        import lightning  # noqa: F401
+    except ImportError:
+        try:
+            import pytorch_lightning  # noqa: F401
+        except ImportError:
+            missing.append("lightning")
     try:
         import wandb  # noqa: F401
     except ImportError:
+        missing.append("wandb")
+    if missing:
         click.echo()
-        click.secho("  ERROR: wandb SDK not installed.", fg="red", bold=True)
-        click.echo("  Install it first: pip install wandb")
+        click.secho("  ERROR: missing packages: %s" % ", ".join(missing),
+                     fg="red", bold=True)
+        click.echo("  Install first: pip install %s" % " ".join(missing))
         click.echo(f"  Then run: python {output}")
         click.echo()
         sys.exit(1)

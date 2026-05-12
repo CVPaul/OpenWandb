@@ -97,6 +97,7 @@
         <!-- Tabs -->
         <div class="tabs">
             <div class="tab active" onclick="switchTab('charts')">Charts</div>
+            <div class="tab" onclick="switchTab('media')">Media</div>
             <div class="tab" onclick="switchTab('config')">Config</div>
             <div class="tab" onclick="switchTab('summary')">Summary</div>
             <div class="tab" onclick="switchTab('system')">System</div>
@@ -119,6 +120,17 @@
                 <p>Use wandb.log() to record metrics during training.</p>
             </div>
             {% endif %}
+        </div>
+
+        <!-- Media Tab -->
+        <div id="tab-media" class="tab-content" style="display: none;">
+            <div id="mediaContent" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; padding: 8px 0;"></div>
+            <div id="mediaEmpty" class="empty-state" style="display: none;">
+                <h3>No media files</h3>
+                <p>Use <code>wandb.Image()</code> to log images during training.<br>
+                They will appear here automatically.</p>
+            </div>
+            <div id="mediaLoading" style="color: var(--text-secondary); padding: 20px;">Loading media files...</div>
         </div>
 
         <!-- Config Tab -->
@@ -214,6 +226,9 @@
         const RUN_ID = "{{ run.run_id }}";
         const RUN_DB_ID = {{ run.id }};
         const METRIC_KEYS = {{ metric_keys | tojson }};
+        const ENTITY = "{{ entity }}";
+        const PROJECT = "{{ project_name }}";
+        const BASE_PATH = "{{ base_path }}";
 
         // Tab 切换
         function switchTab(name) {
@@ -222,6 +237,7 @@
             document.getElementById('tab-' + name).style.display = '';
             event.target.classList.add('active');
             if (name === 'system') loadSystemMetrics();
+            if (name === 'media') loadMedia();
         }
 
         // ECharts 深色主题
@@ -351,6 +367,47 @@
         async function doLogout() {
             await fetch('{{ base_path }}/api/v2/auth/logout', {method: 'POST'});
             window.location.href = '{{ base_path }}/login';
+        }
+
+        // 加载媒体文件 (wandb.Image)
+        let mediaLoaded = false;
+        async function loadMedia() {
+            if (mediaLoaded) return;
+            mediaLoaded = true;
+            const loading = document.getElementById('mediaLoading');
+            const container = document.getElementById('mediaContent');
+            const empty = document.getElementById('mediaEmpty');
+            try {
+                const resp = await fetch(`${BASE_PATH}/api/v1/runs/${RUN_ID}/files`);
+                const data = await resp.json();
+                const imageExts = /\.(png|jpg|jpeg|gif|bmp|webp)$/i;
+                const images = (data.files || []).filter(f =>
+                    f.name.startsWith('media/') && imageExts.test(f.name));
+                loading.style.display = 'none';
+                if (!images.length) {
+                    empty.style.display = '';
+                    return;
+                }
+                // Sort by name (includes step info)
+                images.sort((a, b) => a.name.localeCompare(b.name));
+                images.forEach(f => {
+                    const card = document.createElement('div');
+                    card.style.cssText = 'background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.2s;';
+                    card.onmouseenter = () => card.style.borderColor = 'var(--accent)';
+                    card.onmouseleave = () => card.style.borderColor = 'var(--border)';
+                    const imgUrl = `${BASE_PATH}/files/${ENTITY}/${PROJECT}/${RUN_ID}/${f.name}`;
+                    const fname = f.name.split('/').pop();
+                    const sizeKB = f.size ? (f.size / 1024).toFixed(1) + ' KB' : '';
+                    card.innerHTML = `<img src="${imgUrl}" loading="lazy" alt="${fname}" style="width: 100%; aspect-ratio: 1; object-fit: contain; background: #111; image-rendering: pixelated;">` +
+                        `<div style="padding: 6px 8px; font-size: 11px; color: var(--text-secondary); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${f.name}">${fname}</div>` +
+                        (sizeKB ? `<div style="padding: 0 8px 6px; font-size: 10px; color: var(--text-muted);">${sizeKB}</div>` : '');
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                loading.style.display = 'none';
+                empty.style.display = '';
+                console.error('Failed to load media:', err);
+            }
         }
 
         // 自动刷新
