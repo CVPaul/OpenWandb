@@ -511,9 +511,13 @@ def user_can_write_project(user_id: int, project_id: int) -> bool:
     return False
 
 
-def user_can_access_run(user_id: int, run_id: str) -> bool:
+def user_can_access_run(user_id: int, run_id) -> bool:
+    """检查用户是否可以访问 run (支持 run_id 字符串或数据库 id 整数)"""
     with get_db() as conn:
-        run = conn.execute("SELECT project_id FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        run = conn.execute(
+            "SELECT project_id FROM runs WHERE id = ? OR run_id = ?",
+            (run_id, str(run_id))
+        ).fetchone()
         if not run:
             return False
         return user_can_access_project(user_id, run["project_id"])

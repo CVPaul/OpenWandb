@@ -23,7 +23,7 @@ def _print_banner(host: str, port: int, data_dir: Path):
  | (_) | '_ \/ -_) ' \| |/\| / _` | ' \ ' \/ _` | '_ \
   \___/| .__/\___|_||_|__/\__\__,_|_||_|_||_\__,_|_.__/
        |_|
-    Open Source WandB Server v0.3.3
+    Open Source WandB Server v0.3.4
     Multi-tenant | Sharing | Team Management
     """)
     click.echo(f"  Data directory: {data_dir}")
@@ -142,6 +142,8 @@ def demo(server_url, api_key, project, runs, epochs, no_run, output):
       • Real-time metric logging (loss, accuracy, R²)
       • Namespace grouping (train/*, val/*)
       • Learning rate scheduling with cosine annealing
+      • wandb.Table for prediction result comparison
+      • wandb.Artifact for model weight versioning
       • Run comparison across different model architectures
       • Tags, notes, and group for organizing experiments
 

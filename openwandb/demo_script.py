@@ -4,14 +4,16 @@ OpenWandb Demo — 多模型超参搜索: 非线性函数回归
 ================================================
 
 本脚本演示如何使用 wandb SDK 进行完整的 ML 实验追踪，包括:
-  ✓ wandb.init()   — 初始化实验 (project, config, tags, notes, group, job_type)
-  ✓ wandb.config   — 记录超参数 (lr, hidden_sizes, activation, batch_size, ...)
-  ✓ wandb.log()    — 记录训练指标 (loss, mae, r2, learning_rate)
-  ✓ 命名空间分组     — train/* 和 val/* 指标自动分组
-  ✓ wandb.summary  — 记录最终/最佳指标
-  ✓ 多 Run 对比     — 不同模型架构 + 超参数的横向对比
-  ✓ Tags & Notes   — 用于筛选和记录实验上下文
-  ✓ Group          — 将相关 run 归组，便于批量对比
+  ✓ wandb.init()     — 初始化实验 (project, config, tags, notes, group, job_type)
+  ✓ wandb.config     — 记录超参数 (lr, hidden_sizes, activation, batch_size, ...)
+  ✓ wandb.log()      — 记录训练指标 (loss, mae, r2, learning_rate)
+  ✓ 命名空间分组       — train/* 和 val/* 指标自动分组
+  ✓ wandb.summary    — 记录最终/最佳指标
+  ✓ wandb.Table      — 记录预测结果对比表 (y_true vs y_pred)
+  ✓ wandb.Artifact   — 保存模型权重为 JSON artifact
+  ✓ 多 Run 对比       — 不同模型架构 + 超参数的横向对比
+  ✓ Tags & Notes     — 用于筛选和记录实验上下文
+  ✓ Group            — 将相关 run 归组，便于批量对比
 
 场景: 合成非线性回归 y = sin(x1)*cos(x2) + 0.5*x3^2 + ε
 模型: 纯 NumPy 实现的多层感知机 (MLP)，无需 PyTorch/TensorFlow
@@ -354,6 +356,62 @@ def train_model(config, project_name, group_name, run_index, total_runs):
 
     print(f"  ✓ best_val_loss={best_val_loss:.4f} @ epoch {best_epoch}  "
           f"({training_time:.1f}s, {total_params} params)")
+
+    # ── wandb.Table: 记录预测样本对比表 ──
+    try:
+        n_samples = min(50, len(X_val))
+        table = wandb.Table(columns=["sample_id", "y_true", "y_pred", "abs_error"])
+        for i in range(n_samples):
+            err = abs(y_val[i] - y_val_pred[i])
+            table.add_data(i, round(float(y_val[i]), 4),
+                           round(float(y_val_pred[i]), 4), round(float(err), 4))
+        wandb.log({"predictions": table})
+        print(f"  ✓ Logged prediction table ({n_samples} samples)")
+    except Exception as e:
+        print(f"  ⚠ Table logging skipped: {e}")
+
+    # ── wandb.Artifact: 保存模型权重 ──
+    model_path = None
+    try:
+        import json as _json
+        import tempfile
+        model_data = {
+            "layer_sizes": layer_sizes,
+            "activation": config["activation"],
+            "weights": [w.tolist() for w in model.weights],
+            "biases": [b.tolist() for b in model.biases],
+            "best_val_loss": best_val_loss,
+            "best_epoch": best_epoch,
+        }
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", prefix=f"model-{name}-",
+            delete=False, dir="."
+        ) as f:
+            _json.dump(model_data, f, indent=2)
+            model_path = f.name
+
+        artifact = wandb.Artifact(
+            name=f"model-{name}",
+            type="model",
+            description=f"Trained {name} MLP weights (val_loss={best_val_loss:.4f})",
+            metadata={
+                "architecture": str(layer_sizes),
+                "activation": config["activation"],
+                "total_params": total_params,
+                "best_val_loss": best_val_loss,
+            }
+        )
+        artifact.add_file(model_path)
+        run.log_artifact(artifact)
+        print(f"  ✓ Logged artifact: model-{name}")
+    except Exception as e:
+        print(f"  ⚠ Artifact logging skipped: {e}")
+    finally:
+        if model_path:
+            try:
+                os.remove(model_path)
+            except OSError:
+                pass
 
     # ── wandb.finish: 正确收尾 ──
     wandb.finish()
