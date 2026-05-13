@@ -65,7 +65,7 @@ def main(ctx):
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev mode)")
 @click.option("--root-path", default=None,
               help="URL path prefix for reverse proxy (e.g. /my/prefix)")
-@click.option("--db-backend", default=None,
+@click.option("--db", "--db-backend", "db_backend", default=None,
               type=click.Choice(["sqlite", "postgres"], case_sensitive=False),
               help="Database backend (default: sqlite)")
 @click.option("--pg-url", default=None,
