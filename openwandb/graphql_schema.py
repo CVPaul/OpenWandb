@@ -7,7 +7,7 @@ cliVersionInfo, serverSettings, files, commit, artifact mutations 等
 import json
 import logging
 import uuid
-from typing import Any, NewType, Optional
+from typing import Annotated, Any, NewType, Optional
 
 import strawberry
 from strawberry.scalars import JSON
@@ -896,7 +896,7 @@ class Mutation:
     def commit_artifact(
         self,
         info: Info,
-        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        artifact_id: Annotated[Optional[str], strawberry.argument(name="artifactID")] = None,
     ) -> Optional[CommitArtifactPayload]:
         """wandb SDK commitArtifact mutation"""
         logger.info(f"commitArtifact: id={artifact_id}")
@@ -908,8 +908,8 @@ class Mutation:
     def create_artifact_manifest(
         self,
         info: Info,
-        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
-        base_artifact_id: Optional[str] = strawberry.argument(default=None, name="baseArtifactID"),
+        artifact_id: Annotated[Optional[str], strawberry.argument(name="artifactID")] = None,
+        base_artifact_id: Annotated[Optional[str], strawberry.argument(name="baseArtifactID")] = None,
         entity_name: Optional[str] = None,
         project_name: Optional[str] = None,
         run_name: Optional[str] = None,
@@ -940,7 +940,7 @@ class Mutation:
     def create_artifact_files(
         self,
         info: Info,
-        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        artifact_id: Annotated[Optional[str], strawberry.argument(name="artifactID")] = None,
         artifact_files: Optional[list[CreateArtifactFileSpecInput]] = None,
     ) -> Optional[CreateArtifactFilesPayload]:
         """wandb SDK createArtifactFiles mutation"""
@@ -1009,7 +1009,7 @@ class Mutation:
     def link_artifact(
         self,
         info: Info,
-        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        artifact_id: Annotated[Optional[str], strawberry.argument(name="artifactID")] = None,
         artifact_portfolio_name: Optional[str] = None,
         entity_name: Optional[str] = None,
         project_name: Optional[str] = None,
@@ -1022,7 +1022,7 @@ class Mutation:
     def use_artifact(
         self,
         info: Info,
-        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        artifact_id: Annotated[Optional[str], strawberry.argument(name="artifactID")] = None,
         entity_name: Optional[str] = None,
         project_name: Optional[str] = None,
         run_name: Optional[str] = None,

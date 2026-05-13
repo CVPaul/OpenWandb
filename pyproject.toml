@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openwandb"
-version = "0.5.14"
+version = "0.5.15"
 description = "Open-source WandB-compatible server with multi-tenant support"
 readme = "README.md"
 license = "MIT"
@@ -39,6 +39,14 @@ dependencies = [
     "click>=8.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "httpx>=0.25",
+    "pytest-cov>=4.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/CVPaul/OpenWandb"
 Repository = "https://github.com/CVPaul/OpenWandb"
@@ -52,3 +60,6 @@ artifacts = ["openwandb/data/*.npz"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["openwandb"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
