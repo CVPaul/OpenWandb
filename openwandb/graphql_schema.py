@@ -685,11 +685,55 @@ def _get_user_from_context(info: Info) -> dict:
 
 
 def _get_base_url(info: Info) -> str:
-    """从 GraphQL context 获取服务器 base URL (wandb SDK 需要完整 URL 来上传文件)"""
+    """从 GraphQL context 获取服务器 base URL (wandb SDK 需要完整 URL 来上传文件).
+
+    支持反向代理: 通过 X-Forwarded-* 请求头重建外部 URL.
+    例: https://proxy.example.com/my/prefix/graphql
+        → base_url = https://proxy.example.com/my/prefix
+
+    前缀优先级:
+      1. X-Forwarded-Prefix 请求头 (由反向代理设置)
+      2. ASGI root_path (uvicorn --root-path 传入)
+      3. config.ROOT_PATH (用户通过环境变量 OPENWANDB_ROOT_PATH 或 --root-path CLI 设置)
+      4. Referer header 推断 (最后手段)
+    """
+    from openwandb.config import ROOT_PATH as cfg_root_path
+
     request = info.context.get("request")
-    if request:
-        return str(request.base_url).rstrip("/")
-    return "http://localhost:8080"
+    if not request:
+        # 没有请求上下文, 尽可能用 config 拼一个
+        if cfg_root_path:
+            return f"http://localhost:8080{cfg_root_path}"
+        return "http://localhost:8080"
+
+    # 1. 协议: X-Forwarded-Proto > 请求本身
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+
+    # 2. 主机: X-Forwarded-Host > Host header
+    host = (request.headers.get("x-forwarded-host")
+            or request.headers.get("host")
+            or "localhost:8080")
+
+    # 3. 路径前缀: X-Forwarded-Prefix > ASGI root_path > config ROOT_PATH
+    prefix = (request.headers.get("x-forwarded-prefix")
+              or request.scope.get("root_path", "")
+              or cfg_root_path
+              or "")
+
+    # 4. 如果以上都没拿到前缀, 尝试从 Referer 推断
+    if not prefix:
+        referer = request.headers.get("referer", "")
+        if referer and "/graphql" in referer:
+            # referer = "https://proxy/prefix/graphql" → prefix = "/prefix"
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            idx = parsed.path.find("/graphql")
+            if idx > 0:
+                prefix = parsed.path[:idx]
+
+    base = f"{proto}://{host}{prefix}".rstrip("/")
+    logger.debug(f"_get_base_url: proto={proto}, host={host}, prefix={prefix} → {base}")
+    return base
 
 
 def _resolve_project(name, entity_name, entity):
