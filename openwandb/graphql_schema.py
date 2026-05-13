@@ -286,7 +286,19 @@ class RunType:
     history_tail: Optional[str] = None
     events_tail: Optional[str] = None
     summary_metrics_last: Optional[JSONString] = None
-    wandb_config: Optional[JSONString] = None
+    _config_json: strawberry.Private[str] = "{}"
+
+    @strawberry.field
+    def wandb_config(self, keys: Optional[list[str]] = None) -> Optional[JSONString]:
+        """wandb SDK 查询 wandbConfig(keys: [...]) — 支持按 key 过滤"""
+        if keys:
+            try:
+                full = json.loads(self._config_json)
+                filtered = {k: v for k, v in full.items() if k in keys}
+                return json.dumps(filtered)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return self._config_json
 
     @strawberry.field
     def project(self) -> Optional[ProjectType]:
@@ -472,7 +484,7 @@ def _run_to_type(run: dict) -> RunType:
         display_name=run.get("display_name", ""),
         state=run.get("state", "running"),
         config=config_str,
-        wandb_config=config_str,
+        _config_json=config_str,
         summary_metrics=summary_str,
         summary_metrics_last=summary_str,
         tags=tags,
