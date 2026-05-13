@@ -684,6 +684,14 @@ def _get_user_from_context(info: Info) -> dict:
     return user
 
 
+def _get_base_url(info: Info) -> str:
+    """从 GraphQL context 获取服务器 base URL (wandb SDK 需要完整 URL 来上传文件)"""
+    request = info.context.get("request")
+    if request:
+        return str(request.base_url).rstrip("/")
+    return "http://localhost:8080"
+
+
 def _resolve_project(name, entity_name, entity):
     """共享的 project/model 查询逻辑"""
     ent = entity_name or entity or DEFAULT_TEAM_NAME
@@ -920,9 +928,10 @@ class Mutation:
         include_upload: Optional[bool] = None,
     ) -> Optional[CreateArtifactManifestPayload]:
         """wandb SDK createArtifactManifest mutation"""
+        base_url = _get_base_url(info)
         logger.info(f"createArtifactManifest: artifact_id={artifact_id}, name={name}")
         manifest_id = uuid.uuid4().hex[:8]
-        upload_url = f"/artifacts/{entity_name or 'default'}/{project_name or 'default'}/{run_name or 'unknown'}/manifest"
+        upload_url = f"{base_url}/artifacts/{entity_name or 'default'}/{project_name or 'default'}/{run_name or 'unknown'}/manifest"
         return CreateArtifactManifestPayload(
             artifact_manifest=ArtifactManifestType(
                 id=manifest_id,
@@ -945,11 +954,12 @@ class Mutation:
         artifact_files: Optional[list[CreateArtifactFileSpecInput]] = None,
     ) -> Optional[CreateArtifactFilesPayload]:
         """wandb SDK createArtifactFiles mutation"""
+        base_url = _get_base_url(info)
         logger.info(f"createArtifactFiles: artifact_id={artifact_id}, files={len(artifact_files or [])}")
         edges = []
         for spec in (artifact_files or []):
             fid = uuid.uuid4().hex[:8]
-            upload_url = f"/artifacts/upload/{fid}"
+            upload_url = f"{base_url}/artifacts/upload/{fid}"
             edges.append(ArtifactFileEdgeType(
                 node=FileType(
                     id=fid,
@@ -984,13 +994,15 @@ class Mutation:
         run_name = run or ""
         file_list = files or []
 
+        base_url = _get_base_url(info)
         logger.info(f"createRunFiles: entity={entity_name}, project={project}, "
-                     f"run={run_name}, files={file_list}")
+                     f"run={run_name}, files={file_list}, base_url={base_url}")
 
         result_files = []
         for f in file_list:
             file_id = uuid.uuid4().hex[:8]
-            upload_url = f"/files/{entity_name}/{project}/{run_name}/{f}"
+            # 必须返回完整 URL, 否则 wandb SDK 会报 "unsupported protocol scheme"
+            upload_url = f"{base_url}/files/{entity_name}/{project}/{run_name}/{f}"
             result_files.append(FileType(
                 id=file_id,
                 name=f,

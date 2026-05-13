@@ -138,6 +138,21 @@ async def upload_file(entity: str, project: str, run_id: str, filename: str,
     return JSONResponse({"success": True, "file": info})
 
 
+@app.put("/artifacts/{path:path}")
+async def upload_artifact_file(path: str, request: Request):
+    """Artifact 文件上传 — wandb SDK 通过 createArtifactManifest/createArtifactFiles 获取上传 URL"""
+    user = auth.authenticate(request)
+    content = await request.body()
+    # 保存到 artifacts 目录
+    from openwandb.config import ARTIFACTS_DIR
+    filepath = ARTIFACTS_DIR / path
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, "wb") as f:
+        f.write(content)
+    logger.info(f"Artifact upload: {path} ({len(content)} bytes)")
+    return JSONResponse({"success": True, "size": len(content)})
+
+
 # ═════════════════════════════════════════════
 # 2. 认证 API
 # ═════════════════════════════════════════════
