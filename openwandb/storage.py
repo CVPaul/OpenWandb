@@ -69,7 +69,7 @@ def list_run_files(entity: str, project: str, run_id: str) -> list[dict]:
     for filepath in run_dir.rglob("*"):
         if filepath.is_file():
             result.append({
-                "name": str(filepath.relative_to(run_dir)),
+                "name": str(filepath.relative_to(run_dir)).replace("\\", "/"),
                 "size": filepath.stat().st_size,
                 "path": str(filepath)
             })

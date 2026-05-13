@@ -14,7 +14,7 @@ from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
 from openwandb import database as db
-from openwandb.config import DEFAULT_TEAM_NAME
+from openwandb.config import DEFAULT_TEAM_NAME, ROOT_PATH
 
 logger = logging.getLogger("openwandb.graphql")
 
@@ -249,6 +249,28 @@ class ProjectType:
         return db.get_project_run_count(project["id"])
 
     @strawberry.field
+    def bucket(self, name: Optional[str] = None,
+               missing_ok: Optional[bool] = None) -> Optional["RunType"]:
+        """Legacy alias for run lookup — wandb SDK uses 'bucket' to query runs by name.
+
+        Used in resume status query: model(name:$project) { bucket(name:$runName) { ... } }
+        """
+        if not name:
+            return None
+        # Look up run by run_id within this project
+        project = db.get_project(self.entity_name, self.name)
+        if not project:
+            return None
+        with db.get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM runs WHERE project_id = ? AND run_id = ?",
+                (project["id"], name)
+            ).fetchone()
+        if not row:
+            return None
+        return _run_to_type(dict(row))
+
+    @strawberry.field
     def artifact(self, name: str) -> Optional["ArtifactCollectionType"]:
         """查询项目中的 artifact — wandb SDK 上传前检查是否存在"""
         return None  # 返回 None 表示不存在, SDK 会创建新的
@@ -277,6 +299,30 @@ class RunType:
     history_tail: Optional[str] = None
     events_tail: Optional[str] = None
     summary_metrics_last: Optional[JSONString] = None
+
+    @strawberry.field
+    def wandb_config(self, keys: Optional[list[str]] = None) -> Optional[JSONString]:
+        """Internal wandb config — SDK queries wandbConfig(keys:["t"]) for telemetry/resume.
+
+        Returns a JSON string with the requested keys from the run's _wandb config namespace.
+        If no _wandb config exists, returns empty JSON object.
+        """
+        # Try to extract _wandb namespace from stored config
+        try:
+            config = json.loads(self.config or "{}")
+        except (json.JSONDecodeError, TypeError):
+            config = {}
+
+        wandb_cfg = config.get("_wandb", {})
+        # _wandb may be stored as {"value": {...}} by the SDK
+        if isinstance(wandb_cfg, dict) and "value" in wandb_cfg:
+            wandb_cfg = wandb_cfg["value"]
+
+        if keys:
+            # Filter to only requested keys
+            filtered = {k: wandb_cfg[k] for k in keys if k in wandb_cfg}
+            return json.dumps(filtered)
+        return json.dumps(wandb_cfg if isinstance(wandb_cfg, dict) else {})
 
     @strawberry.field
     def project(self) -> Optional[ProjectType]:
@@ -353,13 +399,19 @@ class ServerInfoType:
     def latest_local_version_info(self) -> "VersionInfoType":
         return VersionInfoType(
             out_of_date=False,
-            latest_version_string="0.3.6"
+            latest_version_string="0.4.3"
         )
 
     @strawberry.field
-    def cli_version_info(self) -> Optional[str]:
-        """wandb SDK 查询 CLI 版本信息"""
-        return None
+    def cli_version_info(self) -> Optional[JSON]:
+        """wandb SDK 查询 CLI 版本信息 — 必须返回 JSON 对象, 不能为 None.
+
+        SDK 内部调用: server_info.get("cliVersionInfo", {}).get("max_cli_version")
+        如果返回 None, dict.get(key, default) 会返回 None(key 存在但值为 null),
+        后续 .get() 调用会报 AttributeError: 'NoneType' object has no attribute 'get'
+        """
+        from openwandb import __version__
+        return {"max_cli_version": __version__, "min_cli_version": "0.0.1"}
 
     @strawberry.field
     def features(self) -> list[ServerFeatureType]:
@@ -372,8 +424,8 @@ class ServerInfoType:
 @strawberry.type
 class VersionInfoType:
     out_of_date: bool = False
-    latest_version_string: str = "0.3.6"
-    version_on_this_instance_string: str = "0.3.6"
+    latest_version_string: str = "0.4.3"
+    version_on_this_instance_string: str = "0.4.3"
 
 
 @strawberry.type
@@ -476,6 +528,28 @@ def _run_to_type(run: dict) -> RunType:
     )
 
 
+def _resolve_project(name: Optional[str] = None, entity_name: Optional[str] = None,
+                     entity: Optional[str] = None) -> Optional[ProjectType]:
+    """Shared project resolver used by both Query.project and Query.model"""
+    ent = entity_name or entity or DEFAULT_TEAM_NAME
+    proj = db.get_project(ent, name)
+    if not proj:
+        # 自动创建 (wandb SDK 行为)
+        proj = db.get_or_create_project(ent, name)
+
+    # 获取 team name 以设置 entity_name
+    team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
+    proj_entity = team["name"] if team else ent
+
+    return ProjectType(
+        id=str(proj["id"]),
+        name=proj["name"],
+        entity_name=proj_entity,
+        description=proj.get("description", ""),
+        created_at=proj["created_at"]
+    )
+
+
 def _get_user_from_context(info: Info) -> dict:
     """从 GraphQL context 获取当前用户, 保证不为 None"""
     user = info.context.get("user")
@@ -513,23 +587,13 @@ class Query:
     def project(self, name: Optional[str] = None, entity_name: Optional[str] = None,
                 entity: Optional[str] = None) -> Optional[ProjectType]:
         """查询项目 — 带权限校验"""
-        ent = entity_name or entity or DEFAULT_TEAM_NAME
-        proj = db.get_project(ent, name)
-        if not proj:
-            # 自动创建 (wandb SDK 行为)
-            proj = db.get_or_create_project(ent, name)
+        return _resolve_project(name=name, entity_name=entity_name, entity=entity)
 
-        # 获取 team name 以设置 entity_name
-        team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
-        proj_entity = team["name"] if team else ent
-
-        return ProjectType(
-            id=str(proj["id"]),
-            name=proj["name"],
-            entity_name=proj_entity,
-            description=proj.get("description", ""),
-            created_at=proj["created_at"]
-        )
+    @strawberry.field
+    def model(self, name: Optional[str] = None, entity_name: Optional[str] = None,
+              entity: Optional[str] = None) -> Optional[ProjectType]:
+        """Legacy alias: wandb SDK uses 'model' as synonym for 'project' in some queries (e.g. resume status)"""
+        return _resolve_project(name=name, entity_name=entity_name, entity=entity)
 
     @strawberry.field
     def server_info(self) -> ServerInfoType:
@@ -726,11 +790,20 @@ class Mutation:
         logger.info(f"createRunFiles: entity={entity_name}, project={project}, "
                      f"run={run_name}, files={file_list}")
 
-        # 为每个文件生成 upload URL (指向 file_stream 端点)
+        # 构造绝对 upload URL — wandb SDK 需要完整 URL 才能 PUT 上传文件
+        request = info.context.get("request")
+        if request:
+            # 从请求中提取服务器 base URL (SDK 视角的地址)
+            host = request.headers.get("host") or str(request.url.netloc)
+            base_url = f"{request.url.scheme}://{host}{ROOT_PATH}"
+        else:
+            base_url = ROOT_PATH
+
         result_files = []
         for f in file_list:
             file_id = uuid.uuid4().hex[:8]
-            upload_url = f"/files/{entity_name}/{project}/{run_name}/{f}"
+            upload_url = f"{base_url}/files/{entity_name}/{project}/{run_name}/{f}"
+            logger.info(f"  upload URL: {upload_url}")
             result_files.append(FileType(
                 id=file_id,
                 name=f,
