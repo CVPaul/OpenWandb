@@ -246,8 +246,10 @@ class ProjectType:
         return db.get_project_run_count(project["id"])
 
     @strawberry.field
-    def bucket(self, name: Optional[str] = None) -> Optional["RunType"]:
-        """wandb SDK 旧版用 'bucket' 查询单个 run（等同于 run）— 用于 resume 检查"""
+    def bucket(self, name: Optional[str] = None,
+               missing_ok: Optional[bool] = None) -> Optional["RunType"]:
+        """wandb SDK 旧版用 'bucket' 查询单个 run（等同于 run）— 用于 resume 检查
+        missingOk: SDK 传此参数表示 run 不存在时返回 null 而非报错"""
         if not name:
             return None
         run = db.get_run(name)
@@ -284,6 +286,7 @@ class RunType:
     history_tail: Optional[str] = None
     events_tail: Optional[str] = None
     summary_metrics_last: Optional[JSONString] = None
+    wandb_config: Optional[JSONString] = None
 
     @strawberry.field
     def project(self) -> Optional[ProjectType]:
@@ -469,6 +472,7 @@ def _run_to_type(run: dict) -> RunType:
         display_name=run.get("display_name", ""),
         state=run.get("state", "running"),
         config=config_str,
+        wandb_config=config_str,
         summary_metrics=summary_str,
         summary_metrics_last=summary_str,
         tags=tags,
