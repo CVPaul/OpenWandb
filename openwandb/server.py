@@ -46,7 +46,7 @@ logger = logging.getLogger("openwandb")
 # FastAPI 应用
 # ─────────────────────────────────────────────
 app = FastAPI(
-    title="Schrödinger",
+    title="OpenWandb",
     description="开源 WandB 兼容服务器 — 多租户版",
     version="0.3.6",
 )
@@ -837,9 +837,7 @@ async def share_page(request: Request, token: str):
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)
-    logger.info(r"   /\_/\    Schrödinger v0.5.4")
-    logger.info(r"  ( ◉ω◉)   ML Experiment Tracker")
-    logger.info(r"  |dead⟩ + |alive⟩ = |tracked⟩")
+    logger.info("  OpenWandb v0.3 Server starting...")
     logger.info("=" * 60)
     db.init_db()
     logger.info(f"  Database initialized at {db.DB_PATH}")

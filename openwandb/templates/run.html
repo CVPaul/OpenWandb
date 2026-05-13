@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ run.display_name }} - Schrödinger</title>
+    <title>{{ run.display_name }} - OpenWandb</title>
     <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <script src="{{ base_path }}/static/echarts.min.js"></script>
     <style>
@@ -40,8 +40,10 @@
 <body>
     <nav class="navbar">
         <a href="{{ base_path }}/" class="navbar-brand">
-            <span class="brand-cat">/\_/\<br>( ◉ω◉)</span>
-            Schrödinger
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
         </a>
         <div class="navbar-links">
             <a href="{{ base_path }}/">Projects</a>
@@ -96,7 +98,6 @@
         <div class="tabs">
             <div class="tab active" onclick="switchTab('charts')">Charts</div>
             <div class="tab" onclick="switchTab('media')">Media</div>
-            <div class="tab" onclick="switchTab('artifacts')">Artifacts</div>
             <div class="tab" onclick="switchTab('config')">Config</div>
             <div class="tab" onclick="switchTab('summary')">Summary</div>
             <div class="tab" onclick="switchTab('system')">System</div>
@@ -122,16 +123,6 @@
                 They will appear here automatically.</p>
             </div>
             <div id="mediaLoading" style="color: var(--text-secondary); padding: 20px;">Loading media files...</div>
-        </div>
-
-        <!-- Artifacts Tab -->
-        <div id="tab-artifacts" class="tab-content" style="display: none;">
-            <div id="artifactsContent"></div>
-            <div id="artifactsEmpty" class="empty-state" style="display: none;">
-                <h3>No artifacts</h3>
-                <p>Use <code>wandb.log_artifact()</code> to save datasets, models, and other files.</p>
-            </div>
-            <div id="artifactsLoading" style="color: var(--text-secondary); padding: 20px;">Loading artifacts...</div>
         </div>
 
         <!-- Config Tab -->
@@ -239,7 +230,6 @@
             event.target.classList.add('active');
             if (name === 'system') loadSystemMetrics();
             if (name === 'media') loadMedia();
-            if (name === 'artifacts') loadArtifacts();
         }
 
         // ECharts 深色主题
@@ -462,51 +452,6 @@
                 loading.style.display = 'none';
                 empty.style.display = '';
                 console.error('Failed to load media:', err);
-            }
-        }
-
-        // Artifacts 加载
-        let artifactsLoaded = false;
-        async function loadArtifacts() {
-            if (artifactsLoaded) return;
-            artifactsLoaded = true;
-            const loading = document.getElementById('artifactsLoading');
-            const container = document.getElementById('artifactsContent');
-            const empty = document.getElementById('artifactsEmpty');
-            try {
-                const resp = await fetch(`${BASE_PATH}/api/v1/runs/${RUN_ID}/artifacts`);
-                const data = await resp.json();
-                const artifacts = data.artifacts || [];
-                loading.style.display = 'none';
-                if (!artifacts.length) {
-                    empty.style.display = '';
-                    return;
-                }
-                let html = '<div class="panel"><div class="panel-header"><h3>Artifacts (' + artifacts.length + ')</h3></div><div class="panel-body">';
-                html += '<table class="config-table"><thead><tr>';
-                html += '<th style="text-align:left;padding:8px 12px;color:var(--text-secondary);border-bottom:1px solid var(--border);">Name</th>';
-                html += '<th style="text-align:left;padding:8px 12px;color:var(--text-secondary);border-bottom:1px solid var(--border);">Type</th>';
-                html += '<th style="text-align:left;padding:8px 12px;color:var(--text-secondary);border-bottom:1px solid var(--border);">Metadata</th>';
-                html += '<th style="text-align:left;padding:8px 12px;color:var(--text-secondary);border-bottom:1px solid var(--border);">Created</th>';
-                html += '</tr></thead><tbody>';
-                artifacts.forEach(a => {
-                    const created = a.created_at ? a.created_at.substring(0, 19).replace('T', ' ') : '-';
-                    const meta = a.metadata && Object.keys(a.metadata).length > 0
-                        ? Object.entries(a.metadata).map(([k,v]) => `<span style="color:var(--text-muted)">${k}:</span> ${v}`).join(', ')
-                        : '-';
-                    html += '<tr>';
-                    html += `<td class="config-key" style="padding:8px 12px;">${a.name}</td>`;
-                    html += `<td class="config-value" style="padding:8px 12px;"><span style="background:var(--bg-secondary);padding:2px 8px;border-radius:4px;font-size:12px;">${a.artifact_type || '-'}</span></td>`;
-                    html += `<td class="config-value" style="padding:8px 12px;font-size:12px;">${meta}</td>`;
-                    html += `<td class="config-value" style="padding:8px 12px;font-size:12px;color:var(--text-muted);">${created}</td>`;
-                    html += '</tr>';
-                });
-                html += '</tbody></table></div></div>';
-                container.innerHTML = html;
-            } catch (err) {
-                loading.style.display = 'none';
-                empty.style.display = '';
-                console.error('Failed to load artifacts:', err);
             }
         }
 

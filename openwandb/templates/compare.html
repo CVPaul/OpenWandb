@@ -3,15 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Compare Runs - {{ project.name }} - Schrödinger</title>
+    <title>Compare Runs - {{ project.name }} - OpenWandb</title>
     <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <script src="{{ base_path }}/static/echarts.min.js"></script>
 </head>
 <body>
     <nav class="navbar">
         <a href="{{ base_path }}/" class="navbar-brand">
-            <span class="brand-cat">/\_/\<br>( ◉ω◉)</span>
-            Schrödinger
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            OpenWandb
         </a>
         <div class="navbar-links">
             <a href="{{ base_path }}/">Projects</a>
