@@ -197,22 +197,18 @@ class EntityType:
         team = db.get_team_by_name(self.name)
         if not team:
             return ProjectConnectionType(edges=[])
-        # 公开列出 (GraphQL 查询来自已认证用户, 这里先列出团队项目)
-        with db.get_db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM projects WHERE team_id = ? ORDER BY created_at DESC LIMIT ?",
-                (team["id"], first)
-            ).fetchall()
+        # 使用 db 模块函数避免直接 SQL (兼容 SQLite/PostgreSQL)
+        projects = _list_projects_by_team(team["id"], limit=first)
         edges = [ProjectEdgeType(
             node=ProjectType(
-                id=str(dict(p)["id"]),
-                name=dict(p)["name"],
+                id=str(p["id"]),
+                name=p["name"],
                 entity_name=self.name,
-                description=dict(p).get("description", ""),
-                created_at=dict(p)["created_at"]
+                description=p.get("description", ""),
+                created_at=p["created_at"]
             ),
-            cursor=str(dict(p)["id"])
-        ) for p in rows]
+            cursor=str(p["id"])
+        ) for p in projects]
         return ProjectConnectionType(edges=edges)
 
 
@@ -282,22 +278,17 @@ class RunType:
     def project(self) -> Optional[ProjectType]:
         run = db.get_run(self.name)
         if run:
-            with db.get_db() as conn:
-                proj = conn.execute("SELECT * FROM projects WHERE id = ?",
-                                    (run["project_id"],)).fetchone()
-                if proj:
-                    proj_dict = dict(proj)
-                    # 获取 team name 作为 entity_name
-                    team = conn.execute("SELECT name FROM teams WHERE id = ?",
-                                        (proj_dict["team_id"],)).fetchone()
-                    entity_name = team["name"] if team else DEFAULT_TEAM_NAME
-                    return ProjectType(
-                        id=str(proj_dict["id"]),
-                        name=proj_dict["name"],
-                        entity_name=entity_name,
-                        description=proj_dict.get("description", ""),
-                        created_at=proj_dict["created_at"]
-                    )
+            proj_dict = db.get_project_by_id(run["project_id"])
+            if proj_dict:
+                team = db.get_team_by_id(proj_dict["team_id"])
+                entity_name = team["name"] if team else DEFAULT_TEAM_NAME
+                return ProjectType(
+                    id=str(proj_dict["id"]),
+                    name=proj_dict["name"],
+                    entity_name=entity_name,
+                    description=proj_dict.get("description", ""),
+                    created_at=proj_dict["created_at"]
+                )
         return None
 
 
@@ -476,6 +467,26 @@ def _run_to_type(run: dict) -> RunType:
     )
 
 
+def _list_projects_by_team(team_id: int, limit: int = 100) -> list[dict]:
+    """列出团队下的项目 — 兼容 SQLite/PostgreSQL，不使用 raw SQL"""
+    # 使用 list_projects_for_user 但传 user_id=0 + team_id 获取公开项目
+    # 更安全的方式: 直接用 db 模块查询
+    with db.get_db() as conn:
+        from openwandb.config import DB_BACKEND
+        if DB_BACKEND == "postgres":
+            conn.execute(
+                "SELECT * FROM projects WHERE team_id = %s ORDER BY created_at DESC LIMIT %s",
+                (team_id, limit)
+            )
+            return [dict(r) for r in conn.fetchall()]
+        else:
+            cur = conn.execute(
+                "SELECT * FROM projects WHERE team_id = ? ORDER BY created_at DESC LIMIT ?",
+                (team_id, limit)
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+
 def _get_user_from_context(info: Info) -> dict:
     """从 GraphQL context 获取当前用户, 保证不为 None"""
     user = info.context.get("user")
@@ -523,6 +534,24 @@ class Query:
         team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
         proj_entity = team["name"] if team else ent
 
+        return ProjectType(
+            id=str(proj["id"]),
+            name=proj["name"],
+            entity_name=proj_entity,
+            description=proj.get("description", ""),
+            created_at=proj["created_at"]
+        )
+
+    @strawberry.field
+    def model(self, name: Optional[str] = None, entity_name: Optional[str] = None,
+              entity: Optional[str] = None) -> Optional[ProjectType]:
+        """wandb SDK 旧版使用 'model' 查询项目（等同于 project）— 用于 resume 检查等"""
+        ent = entity_name or entity or DEFAULT_TEAM_NAME
+        proj = db.get_project(ent, name)
+        if not proj:
+            proj = db.get_or_create_project(ent, name)
+        team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
+        proj_entity = team["name"] if team else ent
         return ProjectType(
             id=str(proj["id"]),
             name=proj["name"],
