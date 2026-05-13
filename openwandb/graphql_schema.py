@@ -246,6 +246,16 @@ class ProjectType:
         return db.get_project_run_count(project["id"])
 
     @strawberry.field
+    def bucket(self, name: Optional[str] = None) -> Optional["RunType"]:
+        """wandb SDK 旧版用 'bucket' 查询单个 run（等同于 run）— 用于 resume 检查"""
+        if not name:
+            return None
+        run = db.get_run(name)
+        if not run:
+            return None
+        return _run_to_type(run)
+
+    @strawberry.field
     def artifact(self, name: str) -> Optional["ArtifactCollectionType"]:
         """查询项目中的 artifact — wandb SDK 上传前检查是否存在"""
         return None  # 返回 None 表示不存在, SDK 会创建新的
