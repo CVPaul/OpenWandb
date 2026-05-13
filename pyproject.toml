@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openwandb"
-version = "0.5.2"
+version = "0.5.3"
 description = "Open-source WandB-compatible server with multi-tenant support"
 readme = "README.md"
 license = "MIT"
