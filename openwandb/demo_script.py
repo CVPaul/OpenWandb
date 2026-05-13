@@ -383,39 +383,9 @@ def get_run_configs(num_runs, epochs):
 # 5. Main
 # ================================================================
 
-def _check_server(url, timeout=5):
-    """Check if the OpenWandb server is reachable. Exit early instead of SDK retry loop."""
-    import urllib.request
-    import urllib.error
-    check_url = url.rstrip("/") + "/graphql"
-    try:
-        req = urllib.request.Request(check_url, method="GET")
-        urllib.request.urlopen(req, timeout=timeout)
-        return True
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError):
-        return False
-
-
 def main():
     os.environ.setdefault("WANDB_BASE_URL", SERVER_URL)
     os.environ.setdefault("WANDB_API_KEY", API_KEY)
-    # Prevent SDK from retrying forever if server goes down mid-run
-    os.environ.setdefault("WANDB_INIT_TIMEOUT", "30")
-
-    # --- Server connectivity check ---
-    print("\nChecking OpenWandb server at %s ..." % SERVER_URL)
-    if not _check_server(SERVER_URL):
-        print("\n  ERROR: Cannot connect to OpenWandb server at %s" % SERVER_URL)
-        print()
-        print("  Please make sure the server is running:")
-        print("    openwandb serve")
-        print()
-        print("  Or specify a different server URL:")
-        print("    export WANDB_BASE_URL=http://your-server:8080")
-        print("    python openwandb-demo.py")
-        print()
-        sys.exit(1)
-    print("  Server is reachable.")
 
     group_name = "mnist-demo-%s" % time.strftime("%Y%m%d-%H%M%S")
 

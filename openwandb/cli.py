@@ -23,7 +23,7 @@ def _print_banner(host: str, port: int, data_dir: Path):
  | (_) | '_ \/ -_) ' \| |/\| / _` | ' \ ' \/ _` | '_ \
   \___/| .__/\___|_||_|__/\__\__,_|_||_|_||_\__,_|_.__/
        |_|
-    Open Source WandB Server v0.5.1
+    Open Source WandB Server v0.3.6
     Multi-tenant | Sharing | Team Management
     """)
     click.echo(f"  Data directory: {data_dir}")
@@ -65,11 +65,7 @@ def main(ctx):
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev mode)")
 @click.option("--root-path", default=None,
               help="URL path prefix for reverse proxy (e.g. /my/prefix)")
-@click.option("--db", type=click.Choice(["sqlite", "postgres"], case_sensitive=False),
-              default=None, help="Database backend (default: sqlite)")
-@click.option("--pg-url", default=None,
-              help="PostgreSQL URL (e.g. postgresql://user:pass@host:5432/db)")
-def serve(host, port, data_dir, log_level, reload, root_path, db, pg_url):
+def serve(host, port, data_dir, log_level, reload, root_path):
     """Start the OpenWandb server."""
     # 在 import config 之前设置环境变量 (config 在导入时读取)
     if data_dir:
@@ -82,28 +78,11 @@ def serve(host, port, data_dir, log_level, reload, root_path, db, pg_url):
         os.environ["OPENWANDB_LOG_LEVEL"] = log_level.upper()
     if root_path:
         os.environ["OPENWANDB_ROOT_PATH"] = root_path
-    if db:
-        os.environ["OPENWANDB_DB_BACKEND"] = db.lower()
-    if pg_url:
-        os.environ["OPENWANDB_PG_URL"] = pg_url
 
     # 现在导入 config (触发目录创建)
-    from openwandb.config import HOST, PORT, LOG_LEVEL, DATA_DIR, ROOT_PATH, DB_BACKEND
+    from openwandb.config import HOST, PORT, LOG_LEVEL, DATA_DIR, ROOT_PATH
 
     _print_banner(HOST, PORT, DATA_DIR)
-    if DB_BACKEND == "postgres":
-        from openwandb.config import PG_URL
-        # 隐藏密码部分
-        display_url = PG_URL
-        if "@" in display_url:
-            prefix, rest = display_url.split("@", 1)
-            if ":" in prefix:
-                proto_user = prefix.rsplit(":", 1)[0]
-                display_url = f"{proto_user}:****@{rest}"
-        click.echo(f"  DB backend:     PostgreSQL")
-        click.echo(f"  PG URL:         {display_url}")
-    else:
-        click.echo(f"  DB backend:     SQLite")
     if ROOT_PATH:
         click.echo(f"  Root path:      {ROOT_PATH}")
 

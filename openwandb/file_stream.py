@@ -116,12 +116,6 @@ def _process_history(entity: str, project: str, run_id: str, content_lines: list
                     "value": float(value),
                     "wall_time": wall_time
                 })
-            elif isinstance(value, dict) and value.get("_type"):
-                # wandb media 类型 (Image, Table, etc.) — 记录引用信息
-                media_type = value.get("_type")
-                filenames = value.get("filenames", [])
-                logger.info(f"Media reference in history: key={key}, type={media_type}, "
-                            f"files={filenames[:3]}{'...' if len(filenames) > 3 else ''}")
 
     if metrics_batch:
         db.insert_metrics(run_id, metrics_batch)
@@ -233,11 +227,7 @@ def _process_log(entity: str, project: str, run_id: str, content_lines: list):
 
 def _save_raw_file(entity: str, project: str, run_id: str,
                    filename: str, content_lines: list):
-    """保存原始文件内容并注册到数据库"""
+    """保存原始文件内容"""
     raw = "\n".join(content_lines)
     if raw:
-        info = storage.save_file(entity, project, run_id, filename, raw.encode("utf-8"))
-        try:
-            db.register_file(run_id, filename, info["path"], info["size"], info["md5"])
-        except Exception:
-            pass  # 文件可能已存在 (重复上传), 忽略
+        storage.save_file(entity, project, run_id, filename, raw.encode("utf-8"))

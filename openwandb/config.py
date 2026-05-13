@@ -47,15 +47,6 @@ DEFAULT_ADMIN_USERNAME = os.getenv("OPENWANDB_ADMIN_USER", "admin")
 DEFAULT_ADMIN_PASSWORD = os.getenv("OPENWANDB_ADMIN_PASS", "admin123")
 DEFAULT_TEAM_NAME = os.getenv("OPENWANDB_DEFAULT_TEAM", "default")
 
-# === 数据库后端 ===
-# sqlite (默认, 零依赖) 或 postgres (生产推荐, 需 pip install openwandb[postgres])
-DB_BACKEND = os.getenv("OPENWANDB_DB_BACKEND", "sqlite").lower()
-
-# PostgreSQL 连接 (仅 DB_BACKEND=postgres 时使用)
-PG_URL = os.getenv("OPENWANDB_PG_URL", "postgresql://openwandb:openwandb@localhost:5432/openwandb")
-PG_POOL_MIN = int(os.getenv("OPENWANDB_PG_POOL_MIN", "2"))
-PG_POOL_MAX = int(os.getenv("OPENWANDB_PG_POOL_MAX", "10"))
-
 # === 其他 ===
 MAX_FILE_SIZE = int(os.getenv("OPENWANDB_MAX_FILE_SIZE", str(500 * 1024 * 1024)))
 LOG_LEVEL = os.getenv("OPENWANDB_LOG_LEVEL", "INFO")
