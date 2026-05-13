@@ -22,6 +22,9 @@ from openwandb.config import PG_URL, PG_POOL_MIN, PG_POOL_MAX
 
 logger = logging.getLogger("openwandb.db.postgres")
 
+# 兼容 server.py 中引用 db.DB_PATH 的日志输出
+DB_PATH = PG_URL or "postgres://(not configured)"
+
 # ─────────────────────────────────────────────
 # 工具函数
 # ─────────────────────────────────────────────

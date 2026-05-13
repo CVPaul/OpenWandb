@@ -65,7 +65,12 @@ def main(ctx):
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev mode)")
 @click.option("--root-path", default=None,
               help="URL path prefix for reverse proxy (e.g. /my/prefix)")
-def serve(host, port, data_dir, log_level, reload, root_path):
+@click.option("--db-backend", default=None,
+              type=click.Choice(["sqlite", "postgres"], case_sensitive=False),
+              help="Database backend (default: sqlite)")
+@click.option("--pg-url", default=None,
+              help="PostgreSQL connection URL (e.g. postgresql://user:pass@host:5432/openwandb)")
+def serve(host, port, data_dir, log_level, reload, root_path, db_backend, pg_url):
     """Start the OpenWandb server."""
     # 在 import config 之前设置环境变量 (config 在导入时读取)
     if data_dir:
@@ -78,6 +83,11 @@ def serve(host, port, data_dir, log_level, reload, root_path):
         os.environ["OPENWANDB_LOG_LEVEL"] = log_level.upper()
     if root_path:
         os.environ["OPENWANDB_ROOT_PATH"] = root_path
+    if pg_url:
+        os.environ["OPENWANDB_PG_URL"] = pg_url
+        os.environ["OPENWANDB_DB_BACKEND"] = "postgres"
+    if db_backend:
+        os.environ["OPENWANDB_DB_BACKEND"] = db_backend
 
     # 现在导入 config (触发目录创建)
     from openwandb.config import HOST, PORT, LOG_LEVEL, DATA_DIR, ROOT_PATH
@@ -100,16 +110,22 @@ def serve(host, port, data_dir, log_level, reload, root_path):
 @main.command()
 @click.option("--data-dir", default=None, type=click.Path(),
               help="Data directory to initialize (default: ~/.openwandb)")
-def init(data_dir):
+@click.option("--pg-url", default=None,
+              help="PostgreSQL connection URL (auto-sets backend to postgres)")
+def init(data_dir, pg_url):
     """Initialize the data directory and database."""
     if data_dir:
         os.environ["OPENWANDB_DATA_DIR"] = str(Path(data_dir).resolve())
+    if pg_url:
+        os.environ["OPENWANDB_PG_URL"] = pg_url
+        os.environ["OPENWANDB_DB_BACKEND"] = "postgres"
 
-    from openwandb.config import DATA_DIR, DB_PATH
+    from openwandb.config import DATA_DIR, DB_BACKEND
     from openwandb import database as db
 
     click.echo(f"Initializing OpenWandb data directory: {DATA_DIR}")
-    click.echo(f"  Database: {DB_PATH}")
+    click.echo(f"  Backend:  {DB_BACKEND}")
+    click.echo(f"  Database: {db.DB_PATH}")
     click.echo(f"  Files:    {DATA_DIR / 'files'}")
     click.echo(f"  Artifacts: {DATA_DIR / 'artifacts'}")
 
