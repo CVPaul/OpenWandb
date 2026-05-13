@@ -70,15 +70,17 @@ class TestServerInfoQuery:
         assert "latestLocalVersionInfo" in info
 
     async def test_cli_version_info(self, app_client: httpx.AsyncClient):
-        """This was the crash: cliVersionInfo returned None -> .get() on NoneType."""
+        """cliVersionInfo is a JSON scalar — SDK queries it as a leaf (no subfields).
+        v0.5.15 crash: was CliVersionInfoType (object type) which required subfield selection.
+        v0.5.16 fix: changed to Optional[JSON] so SDK can query without subfields."""
         data = await gql(app_client, """
-            { serverInfo { cliVersionInfo { maxCliVersion } } }
+            { serverInfo { cliVersionInfo } }
         """)
         assert "errors" not in data
         cli_info = data["data"]["serverInfo"]["cliVersionInfo"]
-        # Should be a dict (not null), with maxCliVersion field
+        # Should be a dict with maxCliVersion key (JSON scalar)
         assert cli_info is not None
-        assert "maxCliVersion" in cli_info
+        assert cli_info["maxCliVersion"] is not None
 
     async def test_server_features(self, app_client: httpx.AsyncClient):
         data = await gql(app_client, """

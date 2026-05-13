@@ -507,9 +507,10 @@ class ServerInfoType:
         )
 
     @strawberry.field
-    def cli_version_info(self) -> Optional[CliVersionInfoType]:
-        """wandb SDK 需要 cliVersionInfo 是对象而非 None/string"""
-        return CliVersionInfoType(max_cli_version=_version)
+    def cli_version_info(self) -> Optional[JSON]:
+        """wandb SDK 查询 cliVersionInfo 时不带子字段选择,
+        因此必须返回 JSON scalar 而非 GraphQL 对象类型."""
+        return {"maxCliVersion": _version}
 
     @strawberry.field
     def features(self) -> list[ServerFeatureType]:
