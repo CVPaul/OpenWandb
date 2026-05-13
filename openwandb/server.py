@@ -494,9 +494,25 @@ async def heartbeat(run_id: str):
 
 @app.get("/api/v1/runs/{run_id}/files")
 async def list_run_files_api(run_id: str):
-    """获取运行的文件列表"""
+    """获取运行的文件列表 (DB + 磁盘 fallback)"""
     files = db.list_files(run_id)
+    if not files:
+        # Fallback: 直接扫描磁盘 (兼容旧版未注册到 DB 的文件)
+        run = db.get_run(run_id)
+        if run:
+            project = db.get_project_by_id(run["project_id"])
+            if project:
+                team = db.get_team_by_id(project["team_id"]) if project.get("team_id") else None
+                entity = team["name"] if team else DEFAULT_TEAM_NAME
+                files = storage.list_run_files(entity, project["name"], run_id)
     return {"files": files}
+
+
+@app.get("/api/v2/runs/{run_id}/artifacts")
+async def api_get_artifacts(run_id: str):
+    """获取运行的 artifact 列表"""
+    artifacts = db.list_artifacts(run_id)
+    return {"artifacts": artifacts}
 
 
 @app.get("/api/v2/projects")

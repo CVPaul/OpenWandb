@@ -100,6 +100,7 @@
             <div class="tab" onclick="switchTab('media')">Media</div>
             <div class="tab" onclick="switchTab('config')">Config</div>
             <div class="tab" onclick="switchTab('summary')">Summary</div>
+            <div class="tab" onclick="switchTab('artifacts')">Artifacts</div>
             <div class="tab" onclick="switchTab('system')">System</div>
         </div>
 
@@ -201,6 +202,17 @@
             {% endif %}
         </div>
 
+        <!-- Artifacts Tab -->
+        <div id="tab-artifacts" class="tab-content" style="display: none;">
+            <div id="artifactsContent"></div>
+            <div id="artifactsEmpty" class="empty-state" style="display: none;">
+                <h3>No artifacts</h3>
+                <p>Use <code>wandb.log_artifact()</code> to save model weights, datasets, etc.<br>
+                They will appear here automatically.</p>
+            </div>
+            <div id="artifactsLoading" style="color: var(--text-secondary); padding: 20px;">Loading artifacts...</div>
+        </div>
+
         <!-- System Tab -->
         <div id="tab-system" class="tab-content" style="display: none;">
             <div id="systemCharts" class="chart-grid"></div>
@@ -230,6 +242,7 @@
             event.target.classList.add('active');
             if (name === 'system') loadSystemMetrics();
             if (name === 'media') loadMedia();
+            if (name === 'artifacts') loadArtifacts();
         }
 
         // ECharts 深色主题
@@ -452,6 +465,70 @@
                 loading.style.display = 'none';
                 empty.style.display = '';
                 console.error('Failed to load media:', err);
+            }
+        }
+
+        // 加载 Artifacts
+        let artifactsLoaded = false;
+        async function loadArtifacts() {
+            if (artifactsLoaded) return;
+            artifactsLoaded = true;
+            const loading = document.getElementById('artifactsLoading');
+            const container = document.getElementById('artifactsContent');
+            const empty = document.getElementById('artifactsEmpty');
+            try {
+                const resp = await fetch(`${BASE_PATH}/api/v2/runs/${RUN_ID}/artifacts`);
+                const data = await resp.json();
+                const artifacts = data.artifacts || [];
+                loading.style.display = 'none';
+                if (!artifacts.length) {
+                    empty.style.display = '';
+                    return;
+                }
+                artifacts.forEach(art => {
+                    const card = document.createElement('div');
+                    card.className = 'panel';
+                    card.style.marginBottom = '12px';
+
+                    const meta = art.metadata || {};
+                    const metaKeys = Object.keys(meta);
+                    let metaHtml = '';
+                    if (metaKeys.length) {
+                        metaHtml = '<table class="config-table" style="margin-top: 8px;">';
+                        metaKeys.forEach(k => {
+                            metaHtml += `<tr><td class="config-key">${k}</td><td class="config-value">${meta[k]}</td></tr>`;
+                        });
+                        metaHtml += '</table>';
+                    }
+
+                    // Type icon
+                    const typeIcon = art.artifact_type === 'model'
+                        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>'
+                        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>';
+
+                    const sizeStr = art.size ? (art.size > 1024*1024 ? (art.size/1024/1024).toFixed(1)+' MB' : (art.size/1024).toFixed(1)+' KB') : '';
+                    const timeStr = art.created_at ? art.created_at.substring(0, 19).replace('T', ' ') : '';
+
+                    card.innerHTML = `
+                        <div class="panel-header" style="display: flex; align-items: center; gap: 8px;">
+                            ${typeIcon}
+                            <h3 style="margin: 0; flex: 1;">${art.name}</h3>
+                            <span class="badge" style="background: var(--bg-secondary); color: var(--accent); font-size: 11px;">${art.artifact_type || 'unknown'}</span>
+                        </div>
+                        <div class="panel-body">
+                            <div style="display: flex; gap: 20px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">
+                                ${sizeStr ? '<span>Size: ' + sizeStr + '</span>' : ''}
+                                ${timeStr ? '<span>Created: ' + timeStr + '</span>' : ''}
+                            </div>
+                            ${metaHtml}
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) {
+                loading.style.display = 'none';
+                empty.style.display = '';
+                console.error('Failed to load artifacts:', err);
             }
         }
 

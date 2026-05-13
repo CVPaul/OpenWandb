@@ -227,7 +227,12 @@ def _process_log(entity: str, project: str, run_id: str, content_lines: list):
 
 def _save_raw_file(entity: str, project: str, run_id: str,
                    filename: str, content_lines: list):
-    """保存原始文件内容"""
+    """保存原始文件内容并注册到数据库"""
     raw = "\n".join(content_lines)
     if raw:
-        storage.save_file(entity, project, run_id, filename, raw.encode("utf-8"))
+        info = storage.save_file(entity, project, run_id, filename, raw.encode("utf-8"))
+        # 注册到数据库, 让 Media tab 能查询到 (fix: 之前只存磁盘没注册)
+        try:
+            db.register_file(run_id, filename, info["path"], info["size"], info["md5"])
+        except Exception:
+            logger.debug(f"File already registered or DB error: {filename}")
