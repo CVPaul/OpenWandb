@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenWandb - Settings</title>
+    <title>Schrödinger - Settings</title>
     <link rel="stylesheet" href="{{ base_path }}/static/style.css">
     <style>
         .settings-grid {
@@ -155,10 +155,8 @@
     <!-- 导航栏 -->
     <nav class="navbar">
         <a href="{{ base_path }}/" class="navbar-brand">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-            OpenWandb
+            <span class="brand-cat">/\_/\<br>( ◉ω◉)</span>
+            Schrödinger
         </a>
         <div class="navbar-links">
             <a href="{{ base_path }}/">Projects</a>
@@ -296,10 +294,22 @@
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success) {
-                    document.getElementById('newKeyValue').textContent = data.api_key.key;
+                    const k = data.api_key;
+                    document.getElementById('newKeyValue').textContent = k.key;
                     document.getElementById('newKeyDisplay').style.display = 'block';
-                    // 刷新列表
-                    setTimeout(() => location.reload(), 500);
+                    // 动态添加到列表 (不刷新页面, 让用户有时间复制 key)
+                    const keysList = document.getElementById('keysList');
+                    const div = document.createElement('div');
+                    div.className = 'key-item';
+                    div.id = 'key-' + k.id;
+                    div.innerHTML = '<div class="key-info">' +
+                        '<h4>' + k.name + '</h4>' +
+                        '<div class="key-meta">' +
+                        '<span>Prefix: <span class="key-prefix">' + k.key_prefix + '...</span></span>' +
+                        '<span>Created: ' + (k.created_at || '').substring(0, 10) + '</span>' +
+                        '</div></div>' +
+                        '<button class="btn btn-sm btn-danger" onclick="deleteKey(' + k.id + ')">Delete</button>';
+                    keysList.insertBefore(div, keysList.firstChild);
                 } else {
                     alert(data.detail || 'Failed to create API key');
                 }
@@ -311,8 +321,10 @@
         function copyKey() {
             const key = document.getElementById('newKeyValue').textContent;
             navigator.clipboard.writeText(key).then(() => {
-                event.target.textContent = 'Copied!';
-                setTimeout(() => event.target.textContent = 'Copy', 2000);
+                const btn = document.querySelector('#newKeyDisplay button');
+                btn.textContent = 'Copied!';
+                btn.style.background = '#28c76f';
+                setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
             });
         }
 

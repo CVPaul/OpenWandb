@@ -29,7 +29,8 @@ from openwandb import file_stream
 from openwandb import storage
 from openwandb.config import (HOST, PORT, DEFAULT_TEAM_NAME, ALLOW_REGISTRATION,
                               DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD,
-                              TEMPLATES_DIR, STATIC_DIR, ROOT_PATH)
+                              TEMPLATES_DIR, STATIC_DIR, ROOT_PATH,
+                              DB_BACKEND, DB_PATH)
 from openwandb.graphql_schema import schema
 
 # ─────────────────────────────────────────────
@@ -46,9 +47,9 @@ logger = logging.getLogger("openwandb")
 # FastAPI 应用
 # ─────────────────────────────────────────────
 app = FastAPI(
-    title="OpenWandb",
+    title="Schrödinger",
     description="开源 WandB 兼容服务器 — 多租户版",
-    version="0.3.6",
+    version="0.4.1",
 )
 
 # 静态文件与模板 (从包内资源路径加载)
@@ -71,6 +72,14 @@ def _tpl(request: Request, template_name: str, context: dict = None) -> template
 async def get_context(request: Request) -> dict:
     user = auth.authenticate(request)
     return {"user": user, "request": request}
+
+@app.get("/graphql")
+async def graphql_get_handler():
+    """Handle bare GET /graphql — 健康检查/浏览器探针返回 200, 不走 Strawberry (避免 400)"""
+    return JSONResponse({
+        "status": "ok",
+        "message": "OpenWandb GraphQL endpoint. Use POST to execute queries."
+    })
 
 graphql_app = GraphQLRouter(schema, context_getter=get_context)
 app.include_router(graphql_app, prefix="/graphql")
@@ -131,9 +140,29 @@ async def upload_file(entity: str, project: str, run_id: str, filename: str,
     """上传文件 — 带写权限校验"""
     user = auth.authenticate(request)
     content = await request.body()
+    logger.info(f"PUT file: {entity}/{project}/{run_id}/{filename} "
+                f"({len(content)} bytes, user={user.get('username', '?')})")
     info = storage.save_file(entity, project, run_id, filename, content)
-    db.register_file(run_id, filename, info["path"], info["size"], info["md5"])
+    try:
+        db.register_file(run_id, filename, info["path"], info["size"], info["md5"])
+    except Exception:
+        pass  # 重复注册忽略
     return JSONResponse({"success": True, "file": info})
+
+
+# 有些 wandb SDK 版本会把 api_url (/api/v1) 拼在文件上传路径前面
+@app.put("/api/v1/files/{entity}/{project}/{run_id}/{filename:path}")
+async def upload_file_v1(entity: str, project: str, run_id: str, filename: str,
+                         request: Request):
+    """文件上传的 /api/v1 前缀兼容 (转发到主上传处理)"""
+    return await upload_file(entity, project, run_id, filename, request)
+
+
+@app.get("/api/v1/files/{entity}/{project}/{run_id}/{filename:path}")
+async def get_file_v1(entity: str, project: str, run_id: str, filename: str,
+                      request: Request):
+    """文件下载的 /api/v1 前缀兼容"""
+    return await get_file(entity, project, run_id, filename, request)
 
 
 # ═════════════════════════════════════════════
@@ -356,8 +385,15 @@ async def api_list_keys(request: Request):
 
 @app.post("/api/v2/settings/api-keys")
 async def api_create_key(request: Request):
-    """创建新 API Key (返回明文, 仅此一次)"""
+    """创建新 API Key (返回明文, 仅此一次), 每用户最多 10 个"""
     user = auth.require_auth(request)
+    # 限制每用户最多 10 个 API Key
+    existing = db.list_api_keys(user["id"])
+    if len(existing) >= 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 10 API keys per user. Please delete an existing key first."
+        )
     body = await request.json()
     name = body.get("name", "default")
     key_info = db.create_api_key(user["id"], name)
@@ -492,9 +528,27 @@ async def heartbeat(run_id: str):
 
 @app.get("/api/v1/runs/{run_id}/files")
 async def list_run_files_api(run_id: str):
-    """获取运行的文件列表"""
-    files = db.list_files(run_id)
+    """获取运行的文件列表 — 从磁盘扫描 (不依赖 files 表注册)"""
+    run = db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    project = db.get_project_by_id(run["project_id"])
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    team = db.get_project_team(run["project_id"])
+    entity = team["name"] if team else DEFAULT_TEAM_NAME
+    files = storage.list_run_files(entity, project["name"], run_id)
     return {"files": files}
+
+
+@app.get("/api/v1/runs/{run_id}/artifacts")
+async def list_run_artifacts_api(run_id: str):
+    """获取运行的 Artifact 列表"""
+    run = db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    artifacts = db.list_artifacts(run_id)
+    return {"artifacts": artifacts}
 
 
 @app.get("/api/v2/projects")
@@ -835,10 +889,15 @@ async def share_page(request: Request, token: str):
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)
-    logger.info("  OpenWandb v0.3 Server starting...")
+    logger.info(r"   /\_/\    Schrödinger v0.5.1")
+    logger.info(r"  ( ◉ω◉)   ML Experiment Tracker")
+    logger.info(r"  |dead⟩ + |alive⟩ = |tracked⟩")
     logger.info("=" * 60)
     db.init_db()
-    logger.info(f"  Database initialized at {db.DB_PATH}")
+    if DB_BACKEND == "postgres":
+        logger.info(f"  Database initialized (PostgreSQL)")
+    else:
+        logger.info(f"  Database initialized at {DB_PATH}")
     logger.info(f"  Web UI:     http://{HOST}:{PORT}")
     logger.info(f"  GraphQL:    http://{HOST}:{PORT}/graphql")
     logger.info(f"  Login:      http://{HOST}:{PORT}/login")
