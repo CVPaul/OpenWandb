@@ -147,14 +147,26 @@ def init(data_dir, pg_url):
 @click.option("--epochs", default=30, type=int, help="Epochs per run (default: 30)")
 @click.option("--no-run", is_flag=True, default=False,
               help="Only generate script, don't execute")
+@click.option("--lightning", is_flag=True, default=False,
+              help="Use PyTorch Lightning (requires: pip install torch lightning)")
 @click.option("--output", "-o", default="openwandb-demo.py", type=click.Path(),
               help="Output script path (default: openwandb-demo.py)")
-def demo(server_url, api_key, project, runs, epochs, no_run, output):
+def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
     """Generate and run an MNIST digit classification demo.
 
     \b
-    Uses PyTorch Lightning to train MLP classifiers on the bundled
-    MNIST dataset. The demo showcases wandb SDK features:
+    Default mode (pure NumPy):
+      Trains MLP classifiers using 100% NumPy — zero PyTorch needed.
+      Hand-written forward/backward, Adam optimizer, cosine LR.
+      Prerequisites: pip install numpy wandb
+
+    \b
+    Lightning mode (--lightning):
+      Same demo using PyTorch Lightning for training.
+      Prerequisites: pip install torch lightning wandb
+
+    \b
+    Both modes showcase full wandb SDK integration:
       • Config tracking & hyperparameter logging
       • Real-time metric logging (loss, accuracy)
       • wandb.Image — prediction samples with labels
@@ -163,14 +175,11 @@ def demo(server_url, api_key, project, runs, epochs, no_run, output):
       • Namespace grouping (train/*, val/*)
       • Cosine annealing learning rate schedule
       • Multi-run comparison across architectures
-      • Tags, notes, and group for organizing experiments
-
-    \b
-    Prerequisites: pip install torch lightning wandb
 
     \b
     Examples:
-      openwandb demo                     # Default: 3 runs × 30 epochs
+      openwandb demo                     # Default: pure NumPy (no torch!)
+      openwandb demo --lightning         # Use PyTorch Lightning
       openwandb demo --runs 5 --epochs 50
       openwandb demo --no-run            # Only generate script
       openwandb demo --server-url http://myserver:8080
@@ -183,8 +192,14 @@ def demo(server_url, api_key, project, runs, epochs, no_run, output):
             "local0000000000000000000000000000000000000000"
         )
 
-    # 读取包内 demo 模板
-    demo_template_path = Path(__file__).parent / "demo_script.py"
+    # 根据模式选择模板: 默认=纯 NumPy, --lightning=Lightning
+    if lightning:
+        demo_template_path = Path(__file__).parent / "demo_script.py"
+        mode_label = "PyTorch Lightning"
+    else:
+        demo_template_path = Path(__file__).parent / "demo_script_numpy.py"
+        mode_label = "Pure NumPy"
+
     template = demo_template_path.read_text(encoding="utf-8")
 
     # 替换参数占位符
@@ -202,6 +217,7 @@ def demo(server_url, api_key, project, runs, epochs, no_run, output):
     click.echo()
     click.echo("=" * 60)
     click.echo("  OpenWandb Demo — ML Experiment Tracking Showcase")
+    click.echo(f"  Mode: {mode_label}")
     click.echo("=" * 60)
     click.echo()
     click.echo(f"  Demo script saved to: {output_path}")
@@ -220,23 +236,31 @@ def demo(server_url, api_key, project, runs, epochs, no_run, output):
         click.echo()
         return
 
-    # 检查依赖
+    # 检查依赖 — 根据模式检查不同的包
     missing = []
-    try:
-        import torch  # noqa: F401
-    except ImportError:
-        missing.append("torch")
-    try:
-        import lightning  # noqa: F401
-    except ImportError:
+    if lightning:
+        # Lightning 模式: 需要 torch + lightning + wandb
         try:
-            import pytorch_lightning  # noqa: F401
+            import torch  # noqa: F401
         except ImportError:
-            missing.append("lightning")
+            missing.append("torch")
+        try:
+            import lightning as _L  # noqa: F401
+        except ImportError:
+            try:
+                import pytorch_lightning  # noqa: F401
+            except ImportError:
+                missing.append("lightning")
+    # 两种模式都需要 numpy 和 wandb
+    try:
+        import numpy  # noqa: F401
+    except ImportError:
+        missing.append("numpy")
     try:
         import wandb  # noqa: F401
     except ImportError:
         missing.append("wandb")
+
     if missing:
         click.echo()
         click.secho("  ERROR: missing packages: %s" % ", ".join(missing),
