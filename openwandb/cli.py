@@ -17,13 +17,14 @@ import click
 
 def _print_banner(host: str, port: int, data_dir: Path):
     """打印启动横幅"""
-    click.echo(r"""
+    from openwandb import __version__
+    click.echo(rf"""
    ___                 _    _                 _ _
   / _ \ _ __  ___ _ _ | |  | |_ _ _ _  _ _  __| | |__
  | (_) | '_ \/ -_) ' \| |/\| / _` | ' \ ' \/ _` | '_ \
   \___/| .__/\___|_||_|__/\__\__,_|_||_|_||_\__,_|_.__/
        |_|
-    Open Source WandB Server v0.3.6
+    Open Source WandB Server v{__version__}
     Multi-tenant | Sharing | Team Management
     """)
     click.echo(f"  Data directory: {data_dir}")

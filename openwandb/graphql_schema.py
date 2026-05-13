@@ -14,6 +14,7 @@ from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
 from openwandb import database as db
+from openwandb import __version__ as _version
 from openwandb.config import DEFAULT_TEAM_NAME
 
 logger = logging.getLogger("openwandb.graphql")
@@ -344,7 +345,7 @@ class ServerInfoType:
     def latest_local_version_info(self) -> "VersionInfoType":
         return VersionInfoType(
             out_of_date=False,
-            latest_version_string="0.3.6"
+            latest_version_string=_version
         )
 
     @strawberry.field
@@ -363,8 +364,8 @@ class ServerInfoType:
 @strawberry.type
 class VersionInfoType:
     out_of_date: bool = False
-    latest_version_string: str = "0.3.6"
-    version_on_this_instance_string: str = "0.3.6"
+    latest_version_string: str = _version
+    version_on_this_instance_string: str = _version
 
 
 @strawberry.type

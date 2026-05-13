@@ -45,10 +45,12 @@ logger = logging.getLogger("openwandb")
 # ─────────────────────────────────────────────
 # FastAPI 应用
 # ─────────────────────────────────────────────
+from openwandb import __version__ as _app_version
+
 app = FastAPI(
     title="OpenWandb",
     description="开源 WandB 兼容服务器 — 多租户版",
-    version="0.3.6",
+    version=_app_version,
 )
 
 # 静态文件与模板 (从包内资源路径加载)
@@ -837,7 +839,7 @@ async def share_page(request: Request, token: str):
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)
-    logger.info("  OpenWandb v0.3 Server starting...")
+    logger.info(f"  OpenWandb v{_app_version} Server starting...")
     logger.info("=" * 60)
     db.init_db()
     logger.info(f"  Database initialized at {db.DB_PATH}")
