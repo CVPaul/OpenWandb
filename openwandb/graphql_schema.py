@@ -1,7 +1,8 @@
 """
-OpenWandb v0.3 — GraphQL Schema
-完全兼容 wandb Python SDK 0.26.x 的 GraphQL 查询和 Mutation
-新增: 所有 resolver 加入权限校验
+OpenWandb v0.5 — GraphQL Schema
+完全兼容 wandb Python SDK 0.16+ / 0.26.x 的 GraphQL 查询和 Mutation
+系统性补全所有 SDK 需要的字段: model, bucket, buckets, wandbConfig,
+cliVersionInfo, serverSettings, files, commit, artifact mutations 等
 """
 import json
 import logging
@@ -91,13 +92,10 @@ class CreateArtifactInput:
     labels: Optional[str] = None
     aliases: Optional[list[AliasActionInput]] = None
     metadata: Optional[str] = None
-    # SDK sends "clientID" (uppercase ID), Strawberry default camelCase would be "clientId"
     client_i_d: Optional[str] = strawberry.field(default=None, name="clientID")
     client_mutation_id: Optional[str] = None
-    # SDK sends "sequenceClientID" (uppercase ID)
     sequence_client_i_d: Optional[str] = strawberry.field(default=None, name="sequenceClientID")
     history_step: Optional[int] = None
-    # SDK sends "distributedID" (uppercase ID)
     distributed_i_d: Optional[str] = strawberry.field(default=None, name="distributedID")
     enable_digest_deduplication: Optional[bool] = None
     storage_region: Optional[str] = None
@@ -113,13 +111,37 @@ class CreateRunFilesInput:
     files: Optional[list[str]] = None
 
 
+@strawberry.input
+class CreateArtifactManifestInput:
+    """wandb SDK createArtifactManifest mutation 输入"""
+    artifact_id: Optional[str] = None
+    base_artifact_id: Optional[str] = None
+    entity_name: Optional[str] = None
+    project_name: Optional[str] = None
+    run_name: Optional[str] = None
+    name: Optional[str] = None
+    digest: Optional[str] = None
+    type: Optional[str] = None
+    include_upload: Optional[bool] = None
+
+
+@strawberry.input
+class CreateArtifactFileSpecInput:
+    """单个 artifact 文件规格"""
+    artifact_id: Optional[str] = strawberry.field(default=None, name="artifactID")
+    name: Optional[str] = None
+    md5: Optional[str] = None
+    artifact_manifest_id: Optional[str] = strawberry.field(default=None, name="artifactManifestID")
+    upload_url: Optional[str] = None
+    storage_path: Optional[str] = None
+
+
 # ─────────────────────────────────────────────
 # GraphQL 类型定义
 # ─────────────────────────────────────────────
 
 @strawberry.type(name="ApiKey")
 class ApiKeyType:
-    """API key 类型 — wandb SDK viewer 查询需要"""
     id: str
     name: str
     description: Optional[str] = None
@@ -138,7 +160,6 @@ class UserType:
 
     @strawberry.field
     def teams(self) -> "EntityConnectionType":
-        """返回 edges/node 格式 (wandb SDK 需要)"""
         return EntityConnectionType(
             edges=[EntityEdgeType(node=EntityType(id=self.entity, name=self.entity))]
         )
@@ -149,7 +170,6 @@ class UserType:
 
     @strawberry.field
     def api_keys(self) -> Optional["ApiKeyConnectionType"]:
-        """wandb SDK viewer 查询需要"""
         return ApiKeyConnectionType(
             edges=[ApiKeyEdgeType(node=ApiKeyType(id="1", name="default"))]
         )
@@ -177,7 +197,6 @@ class EntityConnectionType:
 
 @strawberry.type
 class OrganizationType:
-    """组织类型 — wandb SDK 查询 entity.organization"""
     core_weave_organization_id: Optional[str] = None
     name: str = ""
 
@@ -189,16 +208,13 @@ class EntityType:
 
     @strawberry.field
     def organization(self) -> Optional[OrganizationType]:
-        """wandb SDK 查询组织信息"""
         return None
 
     @strawberry.field
     def projects(self, first: int = 100) -> "ProjectConnectionType":
-        # 通过 team name 查找该团队的项目
         team = db.get_team_by_name(self.name)
         if not team:
             return ProjectConnectionType(edges=[])
-        # 使用 db 模块函数避免直接 SQL (兼容 SQLite/PostgreSQL)
         projects = _list_projects_by_team(team["id"], limit=first)
         edges = [ProjectEdgeType(
             node=ProjectType(
@@ -220,6 +236,7 @@ class ProjectType:
     entity_name: str
     description: str = ""
     created_at: str = ""
+    is_benchmark: bool = False
 
     @strawberry.field
     def entity(self) -> EntityType:
@@ -232,10 +249,7 @@ class ProjectType:
         if not project:
             return RunConnectionType(edges=[])
         runs = db.list_runs(project["id"], limit=first)
-        edges = [RunEdgeType(
-            node=_run_to_type(r),
-            cursor=str(r["id"])
-        ) for r in runs]
+        edges = [RunEdgeType(node=_run_to_type(r), cursor=str(r["id"])) for r in runs]
         return RunConnectionType(edges=edges)
 
     @strawberry.field
@@ -247,9 +261,10 @@ class ProjectType:
 
     @strawberry.field
     def bucket(self, name: Optional[str] = None,
-               missing_ok: Optional[bool] = None) -> Optional["RunType"]:
-        """wandb SDK 旧版用 'bucket' 查询单个 run（等同于 run）— 用于 resume 检查
-        missingOk: SDK 传此参数表示 run 不存在时返回 null 而非报错"""
+               missing_ok: Optional[bool] = None,
+               desc: Optional[str] = None) -> Optional["RunType"]:
+        """wandb SDK 旧版用 'bucket' 查询单个 run (= run)
+        missingOk: run 不存在时返回 null; desc: 用于 upload_urls 等"""
         if not name:
             return None
         run = db.get_run(name)
@@ -258,10 +273,29 @@ class ProjectType:
         return _run_to_type(run)
 
     @strawberry.field
-    def artifact(self, name: str) -> Optional["ArtifactCollectionType"]:
-        """查询项目中的 artifact — wandb SDK 上传前检查是否存在"""
-        return None  # 返回 None 表示不存在, SDK 会创建新的
+    def buckets(self, first: int = 100, order: Optional[str] = None,
+                filters: Optional[JSONString] = None) -> "RunConnectionType":
+        """wandb SDK 旧版用 'buckets' 列出 runs (= runs)"""
+        return self.runs(first=first, order=order, filters=filters)
 
+    @strawberry.field
+    def artifact(self, name: str) -> Optional["ArtifactCollectionType"]:
+        return None
+
+    @strawberry.field
+    def artifact_type(self, name: str = "") -> Optional["ArtifactTypeInfoType"]:
+        """wandb SDK 查询 project 下的 artifact type"""
+        return ArtifactTypeInfoType(id="1", name=name or "dataset")
+
+    @strawberry.field
+    def artifact_collection(self, name: str = "") -> Optional["ArtifactCollectionType"]:
+        """wandb SDK 查询 artifact collection"""
+        return None
+
+
+# ─────────────────────────────────────────────
+# RunType — 包含 wandb SDK 查询的所有字段
+# ─────────────────────────────────────────────
 
 @strawberry.type
 class RunType:
@@ -279,6 +313,7 @@ class RunType:
     sweep_name: Optional[str] = None
     group: Optional[str] = None
     job_type: Optional[str] = None
+    commit: Optional[str] = None
     history_line_count: int = 0
     events_line_count: int = 0
     files_count: int = 0
@@ -286,11 +321,15 @@ class RunType:
     history_tail: Optional[str] = None
     events_tail: Optional[str] = None
     summary_metrics_last: Optional[JSONString] = None
+    stopped: bool = False
+    running: bool = False
     _config_json: strawberry.Private[str] = "{}"
+    _entity_name: strawberry.Private[str] = ""
+    _project_name: strawberry.Private[str] = ""
 
     @strawberry.field
     def wandb_config(self, keys: Optional[list[str]] = None) -> Optional[JSONString]:
-        """wandb SDK 查询 wandbConfig(keys: [...]) — 支持按 key 过滤"""
+        """wandb SDK 查询 wandbConfig(keys: [...])"""
         if keys:
             try:
                 full = json.loads(self._config_json)
@@ -317,6 +356,41 @@ class RunType:
                 )
         return None
 
+    @strawberry.field
+    def files(self, pattern: Optional[str] = None,
+              names: Optional[list[str]] = None,
+              first: int = 1000) -> Optional["FileConnectionType"]:
+        """wandb SDK 查询 run 的文件列表"""
+        file_list = db.list_files(self.name)
+        edges = []
+        for f in file_list[:first]:
+            url = f"/files/{self._entity_name}/{self._project_name}/{self.name}/{f['name']}"
+            edges.append(FileEdgeType(
+                node=FileType(
+                    id=str(f["id"]),
+                    name=f["name"],
+                    display_name=f["name"],
+                    direct_url=url,
+                    upload_url=url,
+                    md5=f.get("md5", ""),
+                    size_bytes=f.get("size", 0),
+                    updated_at=f.get("created_at", ""),
+                )
+            ))
+        return FileConnectionType(edges=edges, upload_headers=[])
+
+    @strawberry.field
+    def sampling_info(self) -> Optional[JSONString]:
+        return None
+
+    @strawberry.field
+    def agent(self) -> Optional[str]:
+        return None
+
+
+# ─────────────────────────────────────────────
+# Connection / Edge types
+# ─────────────────────────────────────────────
 
 @strawberry.type
 class RunEdgeType:
@@ -354,11 +428,70 @@ class PageInfoType:
     end_cursor: Optional[str] = None
 
 
+# ─────────────────────────────────────────────
+# File types
+# ─────────────────────────────────────────────
+
+@strawberry.type
+class FileType:
+    id: str
+    name: str = ""
+    display_name: str = ""
+    direct_url: str = ""
+    upload_url: Optional[str] = None
+    upload_headers: list[str] = strawberry.field(default_factory=list)
+    md5: Optional[str] = None
+    size_bytes: int = 0
+    updated_at: Optional[str] = None
+
+    @strawberry.field
+    def url(self, upload: Optional[bool] = None) -> Optional[str]:
+        """wandb SDK 查询 url(upload: true/false)"""
+        if upload:
+            return self.upload_url or self.direct_url
+        return self.direct_url
+
+
+@strawberry.type
+class FileEdgeType:
+    node: FileType
+
+
+@strawberry.type
+class FileConnectionType:
+    edges: list[FileEdgeType]
+    upload_headers: list[str] = strawberry.field(default_factory=list)
+
+
+# ─────────────────────────────────────────────
+# Server info types
+# ─────────────────────────────────────────────
+
+@strawberry.type
+class CliVersionInfoType:
+    """wandb SDK 查询 serverInfo.cliVersionInfo.max_cli_version"""
+    max_cli_version: Optional[str] = None
+
+
 @strawberry.type
 class ServerFeatureType:
-    """wandb SDK 查询服务端 feature flags"""
     name: str
     is_enabled: bool = True
+
+
+@strawberry.type
+class ServerMessageType:
+    utf_text: str = ""
+    plain_text: str = ""
+    html_text: str = ""
+    message_type: str = ""
+    message_level: str = ""
+
+
+@strawberry.type
+class ServerSettingsType:
+    """wandb SDK 查询 upsertBucket 返回中的 serverSettings"""
+    server_messages: list[ServerMessageType] = strawberry.field(default_factory=list)
 
 
 @strawberry.type
@@ -374,13 +507,12 @@ class ServerInfoType:
         )
 
     @strawberry.field
-    def cli_version_info(self) -> Optional[str]:
-        """wandb SDK 查询 CLI 版本信息"""
-        return None
+    def cli_version_info(self) -> Optional[CliVersionInfoType]:
+        """wandb SDK 需要 cliVersionInfo 是对象而非 None/string"""
+        return CliVersionInfoType(max_cli_version=_version)
 
     @strawberry.field
     def features(self) -> list[ServerFeatureType]:
-        """wandb SDK 查询服务端支持的 features"""
         return [
             ServerFeatureType(name="artifact", is_enabled=True),
         ]
@@ -393,10 +525,15 @@ class VersionInfoType:
     version_on_this_instance_string: str = _version
 
 
+# ─────────────────────────────────────────────
+# Mutation payload types
+# ─────────────────────────────────────────────
+
 @strawberry.type
 class UpsertBucketPayload:
     bucket: Optional[RunType] = None
     inserted: bool = False
+    server_settings: Optional[ServerSettingsType] = None
 
 
 @strawberry.type
@@ -405,8 +542,12 @@ class CreateArtifactPayload:
 
 
 @strawberry.type
+class CommitArtifactPayload:
+    artifact: Optional["ArtifactType"] = None
+
+
+@strawberry.type
 class ArtifactCollectionType:
-    """Artifact 集合 — wandb SDK 查询 project.artifact(name)"""
     id: str
     name: str = ""
 
@@ -417,14 +558,12 @@ class ArtifactCollectionType:
 
 @strawberry.type
 class ArtifactTypeInfoType:
-    """Artifact 类型信息"""
     id: str
     name: str = ""
 
 
 @strawberry.type
 class ArtifactSequenceType:
-    """Artifact 序列 — 管理版本链"""
     id: str = "1"
     latest_artifact: Optional["ArtifactType"] = None
 
@@ -444,21 +583,31 @@ class ArtifactType:
 @strawberry.type
 class ArtifactManifestType:
     id: str
-    file: Optional["FileType"] = None
+    file: Optional[FileType] = None
 
 
 @strawberry.type
-class FileType:
-    id: str
-    name: str = ""
-    direct_url: str = ""
-    upload_url: Optional[str] = None
-    upload_headers: list[str] = strawberry.field(default_factory=list)
+class CreateArtifactManifestPayload:
+    artifact_manifest: Optional[ArtifactManifestType] = None
+
+
+@strawberry.type
+class CreateArtifactFilesPayload:
+    files: Optional["ArtifactFileConnectionType"] = None
+
+
+@strawberry.type
+class ArtifactFileEdgeType:
+    node: FileType
+
+
+@strawberry.type
+class ArtifactFileConnectionType:
+    edges: list[ArtifactFileEdgeType] = strawberry.field(default_factory=list)
 
 
 @strawberry.type
 class CreateRunFilesPayload:
-    """createRunFiles mutation 返回 — 字段名需匹配 wandb SDK 期望的 GraphQL schema"""
     run_i_d: Optional[str] = strawberry.field(default=None, name="runID")
     upload_headers: list[str] = strawberry.field(default_factory=list)
     files: Optional[list[FileType]] = None
@@ -478,11 +627,21 @@ def _run_to_type(run: dict) -> RunType:
     config_str = run.get("config_json", "{}")
     summary_str = run.get("summary_json", "{}")
 
+    # 查询 entity_name 和 project_name 用于文件 URL
+    entity_name = ""
+    project_name = ""
+    proj_dict = db.get_project_by_id(run.get("project_id")) if run.get("project_id") else None
+    if proj_dict:
+        project_name = proj_dict["name"]
+        team = db.get_team_by_id(proj_dict["team_id"]) if proj_dict.get("team_id") else None
+        entity_name = team["name"] if team else DEFAULT_TEAM_NAME
+
+    state = run.get("state", "running")
     return RunType(
         id=str(run["id"]),
         name=run["run_id"],
         display_name=run.get("display_name", ""),
-        state=run.get("state", "running"),
+        state=state,
         config=config_str,
         _config_json=config_str,
         summary_metrics=summary_str,
@@ -491,13 +650,16 @@ def _run_to_type(run: dict) -> RunType:
         notes=run.get("notes", ""),
         created_at=run.get("created_at", ""),
         heartbeat_at=run.get("heartbeat_at", ""),
+        commit=run.get("commit", ""),
+        running=(state == "running"),
+        stopped=(state in ("finished", "failed", "crashed")),
+        _entity_name=entity_name,
+        _project_name=project_name,
     )
 
 
 def _list_projects_by_team(team_id: int, limit: int = 100) -> list[dict]:
-    """列出团队下的项目 — 兼容 SQLite/PostgreSQL，不使用 raw SQL"""
-    # 使用 list_projects_for_user 但传 user_id=0 + team_id 获取公开项目
-    # 更安全的方式: 直接用 db 模块查询
+    """列出团队下的项目 — 兼容 SQLite/PostgreSQL"""
     with db.get_db() as conn:
         from openwandb.config import DB_BACKEND
         if DB_BACKEND == "postgres":
@@ -515,11 +677,27 @@ def _list_projects_by_team(team_id: int, limit: int = 100) -> list[dict]:
 
 
 def _get_user_from_context(info: Info) -> dict:
-    """从 GraphQL context 获取当前用户, 保证不为 None"""
     user = info.context.get("user")
     if not user:
         return {"id": 1, "username": "admin", "entity": DEFAULT_TEAM_NAME}
     return user
+
+
+def _resolve_project(name, entity_name, entity):
+    """共享的 project/model 查询逻辑"""
+    ent = entity_name or entity or DEFAULT_TEAM_NAME
+    proj = db.get_project(ent, name)
+    if not proj:
+        proj = db.get_or_create_project(ent, name)
+    team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
+    proj_entity = team["name"] if team else ent
+    return ProjectType(
+        id=str(proj["id"]),
+        name=proj["name"],
+        entity_name=proj_entity,
+        description=proj.get("description", ""),
+        created_at=proj["created_at"]
+    )
 
 
 # ─────────────────────────────────────────────
@@ -530,7 +708,6 @@ def _get_user_from_context(info: Info) -> dict:
 class Query:
     @strawberry.field
     def viewer(self, info: Info) -> Optional[UserType]:
-        """wandb SDK 初始化时调用 viewer 获取当前用户信息"""
         user = _get_user_from_context(info)
         entity = user.get("entity", DEFAULT_TEAM_NAME)
         return UserType(
@@ -544,48 +721,18 @@ class Query:
 
     @strawberry.field
     def entity(self, name: Optional[str] = None) -> Optional[EntityType]:
-        entity_name = name or DEFAULT_TEAM_NAME
-        return EntityType(id=entity_name, name=entity_name)
+        return EntityType(id=name or DEFAULT_TEAM_NAME, name=name or DEFAULT_TEAM_NAME)
 
     @strawberry.field
     def project(self, name: Optional[str] = None, entity_name: Optional[str] = None,
                 entity: Optional[str] = None) -> Optional[ProjectType]:
-        """查询项目 — 带权限校验"""
-        ent = entity_name or entity or DEFAULT_TEAM_NAME
-        proj = db.get_project(ent, name)
-        if not proj:
-            # 自动创建 (wandb SDK 行为)
-            proj = db.get_or_create_project(ent, name)
-
-        # 获取 team name 以设置 entity_name
-        team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
-        proj_entity = team["name"] if team else ent
-
-        return ProjectType(
-            id=str(proj["id"]),
-            name=proj["name"],
-            entity_name=proj_entity,
-            description=proj.get("description", ""),
-            created_at=proj["created_at"]
-        )
+        return _resolve_project(name, entity_name, entity)
 
     @strawberry.field
     def model(self, name: Optional[str] = None, entity_name: Optional[str] = None,
               entity: Optional[str] = None) -> Optional[ProjectType]:
-        """wandb SDK 旧版使用 'model' 查询项目（等同于 project）— 用于 resume 检查等"""
-        ent = entity_name or entity or DEFAULT_TEAM_NAME
-        proj = db.get_project(ent, name)
-        if not proj:
-            proj = db.get_or_create_project(ent, name)
-        team = db.get_team_by_id(proj["team_id"]) if proj.get("team_id") else None
-        proj_entity = team["name"] if team else ent
-        return ProjectType(
-            id=str(proj["id"]),
-            name=proj["name"],
-            entity_name=proj_entity,
-            description=proj.get("description", ""),
-            created_at=proj["created_at"]
-        )
+        """wandb SDK 旧版用 'model' 查询项目 (= project)"""
+        return _resolve_project(name, entity_name, entity)
 
     @strawberry.field
     def server_info(self) -> ServerInfoType:
@@ -603,7 +750,6 @@ class Mutation:
         self,
         info: Info,
         input: Optional[UpsertBucketInput] = None,
-        # 同时支持直接参数 (向后兼容)
         id: Optional[str] = None,
         name: Optional[str] = None,
         project: Optional[str] = None,
@@ -624,12 +770,6 @@ class Mutation:
         sweep: Optional[str] = None,
         debug: Optional[bool] = None,
     ) -> Optional[UpsertBucketPayload]:
-        """
-        wandb.init() 的核心 GraphQL mutation
-        支持通过 input 对象 或 直接参数传递
-        v0.2: 加入权限校验 — 用户需要是团队成员才能创建 run
-        """
-        # 如果传了 input 对象, 从中提取参数
         if input is not None:
             id = input.id or id
             name = input.name or name
@@ -659,21 +799,16 @@ class Mutation:
         logger.info(f"upsertBucket: entity={entity_name}, project={project_name}, "
                      f"run={run_id}, user={user.get('username')}")
 
-        # 确保项目存在 (传入 owner_id)
         proj = db.get_or_create_project(entity_name, project_name, owner_id=user_id)
 
-        # 权限校验: 用户需要有项目写权限
         if not db.user_can_write_project(user_id, proj["id"]):
-            # 宽松模式: 如果用户是团队成员但没有明确写权限, 也允许 (自动加入团队)
             team = db.get_team_by_name(entity_name)
             if team:
                 role = db.get_user_team_role(user_id, team["id"])
                 if not role:
-                    # 自动加入团队为 member (便于 SDK 使用)
                     db.add_team_member(team["id"], user_id, "member")
                     logger.info(f"Auto-added user {user.get('username')} to team {entity_name}")
 
-        # 解析配置
         config_dict = {}
         if config:
             try:
@@ -681,7 +816,6 @@ class Mutation:
             except json.JSONDecodeError:
                 pass
 
-        # 解析 summary
         summary_dict = {}
         if summary_metrics:
             try:
@@ -689,7 +823,6 @@ class Mutation:
             except json.JSONDecodeError:
                 pass
 
-        # Upsert 运行
         run = db.upsert_run(
             project_id=proj["id"],
             run_id=run_id,
@@ -708,7 +841,11 @@ class Mutation:
             run = db.get_run(run_id)
 
         run_type = _run_to_type(run)
-        return UpsertBucketPayload(bucket=run_type, inserted=True)
+        return UpsertBucketPayload(
+            bucket=run_type,
+            inserted=True,
+            server_settings=ServerSettingsType(server_messages=[])
+        )
 
     @strawberry.mutation
     def create_artifact(
@@ -726,8 +863,6 @@ class Mutation:
         aliases: Optional[list[str]] = None,
         metadata: Optional[str] = None,
     ) -> Optional[CreateArtifactPayload]:
-        """创建 Artifact — 完全兼容 wandb SDK 0.26.x (支持 input 对象或直接参数)"""
-        # 从 input 提取参数
         if input is not None:
             artifact_type_name = input.artifact_type_name or artifact_type_name
             artifact_collection_name = input.artifact_collection_name or artifact_collection_name
@@ -758,6 +893,77 @@ class Mutation:
         return CreateArtifactPayload(artifact=None)
 
     @strawberry.mutation
+    def commit_artifact(
+        self,
+        info: Info,
+        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+    ) -> Optional[CommitArtifactPayload]:
+        """wandb SDK commitArtifact mutation"""
+        logger.info(f"commitArtifact: id={artifact_id}")
+        return CommitArtifactPayload(
+            artifact=ArtifactType(id=artifact_id or "0", digest="", state="COMMITTED")
+        )
+
+    @strawberry.mutation
+    def create_artifact_manifest(
+        self,
+        info: Info,
+        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        base_artifact_id: Optional[str] = strawberry.argument(default=None, name="baseArtifactID"),
+        entity_name: Optional[str] = None,
+        project_name: Optional[str] = None,
+        run_name: Optional[str] = None,
+        name: Optional[str] = None,
+        digest: Optional[str] = None,
+        type: Optional[str] = None,
+        include_upload: Optional[bool] = None,
+    ) -> Optional[CreateArtifactManifestPayload]:
+        """wandb SDK createArtifactManifest mutation"""
+        logger.info(f"createArtifactManifest: artifact_id={artifact_id}, name={name}")
+        manifest_id = uuid.uuid4().hex[:8]
+        upload_url = f"/artifacts/{entity_name or 'default'}/{project_name or 'default'}/{run_name or 'unknown'}/manifest"
+        return CreateArtifactManifestPayload(
+            artifact_manifest=ArtifactManifestType(
+                id=manifest_id,
+                file=FileType(
+                    id=manifest_id,
+                    name=name or "manifest.json",
+                    display_name=name or "manifest.json",
+                    direct_url=upload_url,
+                    upload_url=upload_url,
+                    upload_headers=[],
+                )
+            )
+        )
+
+    @strawberry.mutation
+    def create_artifact_files(
+        self,
+        info: Info,
+        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        artifact_files: Optional[list[CreateArtifactFileSpecInput]] = None,
+    ) -> Optional[CreateArtifactFilesPayload]:
+        """wandb SDK createArtifactFiles mutation"""
+        logger.info(f"createArtifactFiles: artifact_id={artifact_id}, files={len(artifact_files or [])}")
+        edges = []
+        for spec in (artifact_files or []):
+            fid = uuid.uuid4().hex[:8]
+            upload_url = f"/artifacts/upload/{fid}"
+            edges.append(ArtifactFileEdgeType(
+                node=FileType(
+                    id=fid,
+                    name=spec.name or "",
+                    display_name=spec.name or "",
+                    direct_url=upload_url,
+                    upload_url=upload_url,
+                    upload_headers=[],
+                )
+            ))
+        return CreateArtifactFilesPayload(
+            files=ArtifactFileConnectionType(edges=edges)
+        )
+
+    @strawberry.mutation
     def create_run_files(
         self,
         info: Info,
@@ -767,8 +973,6 @@ class Mutation:
         run: Optional[str] = None,
         files: Optional[list[str]] = None,
     ) -> Optional[CreateRunFilesPayload]:
-        """wandb SDK 注册 run 文件 (artifact 上传前置步骤)"""
-        # 从 input 提取参数
         if input is not None:
             entity = input.entity_name or entity
             project = input.project_name or project
@@ -782,7 +986,6 @@ class Mutation:
         logger.info(f"createRunFiles: entity={entity_name}, project={project}, "
                      f"run={run_name}, files={file_list}")
 
-        # 为每个文件生成 upload URL (指向 file_stream 端点)
         result_files = []
         for f in file_list:
             file_id = uuid.uuid4().hex[:8]
@@ -790,6 +993,7 @@ class Mutation:
             result_files.append(FileType(
                 id=file_id,
                 name=f,
+                display_name=f,
                 direct_url=upload_url,
                 upload_url=upload_url,
                 upload_headers=[],
@@ -800,6 +1004,32 @@ class Mutation:
             upload_headers=[],
             files=result_files,
         )
+
+    @strawberry.mutation
+    def link_artifact(
+        self,
+        info: Info,
+        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        artifact_portfolio_name: Optional[str] = None,
+        entity_name: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> Optional[bool]:
+        """wandb SDK linkArtifact mutation — stub"""
+        logger.info(f"linkArtifact: id={artifact_id}")
+        return True
+
+    @strawberry.mutation
+    def use_artifact(
+        self,
+        info: Info,
+        artifact_id: Optional[str] = strawberry.argument(default=None, name="artifactID"),
+        entity_name: Optional[str] = None,
+        project_name: Optional[str] = None,
+        run_name: Optional[str] = None,
+    ) -> Optional["ArtifactType"]:
+        """wandb SDK useArtifact mutation — stub"""
+        logger.info(f"useArtifact: id={artifact_id}")
+        return ArtifactType(id=artifact_id or "0", digest="", state="COMMITTED")
 
 
 # ─────────────────────────────────────────────
