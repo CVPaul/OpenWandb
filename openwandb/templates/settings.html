@@ -298,8 +298,19 @@
                 if (resp.ok && data.success) {
                     document.getElementById('newKeyValue').textContent = data.api_key.key;
                     document.getElementById('newKeyDisplay').style.display = 'block';
-                    // 刷新列表
-                    setTimeout(() => location.reload(), 500);
+                    // 动态添加到列表（不刷新页面，避免 key 闪现来不及 copy）
+                    const ak = data.api_key;
+                    const html = `<div class="key-item" id="key-${ak.id}">
+                        <div class="key-info">
+                            <h4>${ak.name}</h4>
+                            <div class="key-meta">
+                                <span>Prefix: <span class="key-prefix">${ak.key.substring(0, 8)}...</span></span>
+                                <span>Created: ${ak.created_at ? ak.created_at.substring(0, 10) : 'just now'}</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-danger" onclick="deleteKey(${ak.id})">Delete</button>
+                    </div>`;
+                    document.getElementById('keysList').insertAdjacentHTML('afterbegin', html);
                 } else {
                     alert(data.detail || 'Failed to create API key');
                 }
