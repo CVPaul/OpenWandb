@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openwandb"
-version = "0.3.6"
+version = "0.5.2"
 description = "Open-source WandB-compatible server with multi-tenant support"
 readme = "README.md"
 license = "MIT"
@@ -39,6 +39,9 @@ dependencies = [
     "click>=8.0.0",
 ]
 
+[project.optional-dependencies]
+postgres = ["psycopg2-binary>=2.9.0"]
+
 [project.urls]
 Homepage = "https://github.com/CVPaul/OpenWandb"
 Repository = "https://github.com/CVPaul/OpenWandb"
@@ -48,7 +51,7 @@ Issues = "https://github.com/CVPaul/OpenWandb/issues"
 openwandb = "openwandb.cli:main"
 
 [tool.hatch.build]
-artifacts = ["openwandb/data/*.npz"]
+artifacts = ["openwandb/data/*.npz", "openwandb/static/*.svg"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["openwandb"]

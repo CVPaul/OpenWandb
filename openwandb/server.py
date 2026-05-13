@@ -889,7 +889,7 @@ async def share_page(request: Request, token: str):
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)
-    logger.info(r"   /\_/\    Schrödinger v0.5.1")
+    logger.info(r"   /\_/\    Schrödinger v0.5.2")
     logger.info(r"  ( ◉ω◉)   ML Experiment Tracker")
     logger.info(r"  |dead⟩ + |alive⟩ = |tracked⟩")
     logger.info("=" * 60)
