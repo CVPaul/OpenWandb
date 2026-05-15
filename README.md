@@ -7,6 +7,25 @@ Just set `WANDB_BASE_URL` and your existing training scripts work seamlessly wit
 [![PyPI version](https://badge.fury.io/py/openwandb.svg)](https://pypi.org/project/openwandb/)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![GitHub stars](https://img.shields.io/github/stars/CVPaul/OpenWandb?style=social)](https://github.com/CVPaul/OpenWandb)
+
+> If you find OpenWandb useful, please consider giving it a star on GitHub — it helps others discover the project!
+
+## Why OpenWandb?
+
+| | **wandb Cloud** | **OpenWandb** |
+|---|---|---|
+| **Pricing** | Free tier limited; paid plans per user | Free forever |
+| **Data location** | wandb servers (US) | Your own server |
+| **Privacy** | Data uploaded to third party | 100% on-premise |
+| **Setup** | Create account, get API key | `pip install openwandb && openwandb serve` |
+| **Code changes** | None | None — just change `WANDB_BASE_URL` |
+| **User limits** | Varies by plan | Unlimited |
+| **Run limits** | Varies by plan | Unlimited |
+| **Storage** | Limited by plan | Limited by your disk |
+| **Offline/Air-gapped** | No | Yes |
+| **Custom deployment** | No | K8s, Docker, bare metal, NFS |
+| **Multi-tenant** | Enterprise only | Built-in |
 
 ## Features
 
