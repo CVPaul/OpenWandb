@@ -53,6 +53,18 @@ app = FastAPI(
     version=_app_version,
 )
 
+
+# Global exception handler — catches unhandled errors (e.g., stale DB connections)
+# and returns a JSON error instead of bare "Internal Server Error"
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {type(exc).__name__}. Please retry."},
+    )
+
+
 # Static files and templates (loaded from package resource path)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

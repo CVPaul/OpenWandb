@@ -2,6 +2,14 @@
 
 All notable changes to OpenWandb will be documented in this file.
 
+## [0.5.25] - 2025-05-15
+
+### Fixed
+- **Stale database connection after long idle**: PostgreSQL connections in the pool could be silently dropped by firewalls or load balancers during idle periods, causing "Internal Error" on the next request. Added connection health check (`SELECT 1`) before each use — stale connections are automatically replaced.
+- **PostgreSQL TCP keepalive**: Connection pool now enables TCP keepalive (60s idle, 10s interval, 5 retries) to keep connections alive through network middleboxes.
+- **SQLite lock timeout**: Increased from default 5s to 30s to handle NFS and high-concurrency scenarios.
+- **Global error handler**: Unhandled exceptions now return structured JSON error with error type instead of bare "Internal Server Error", with full stack trace in server logs.
+
 ## [0.5.24] - 2025-05-15
 
 ### Changed

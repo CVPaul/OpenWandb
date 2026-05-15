@@ -197,15 +197,48 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     global _pool
     if _pool is None:
         logger.info(f"Creating PostgreSQL connection pool ({PG_POOL_MIN}-{PG_POOL_MAX} connections)")
-        _pool = psycopg2.pool.ThreadedConnectionPool(PG_POOL_MIN, PG_POOL_MAX, PG_URL)
+        # Set TCP keepalive to detect dead connections early
+        _pool = psycopg2.pool.ThreadedConnectionPool(
+            PG_POOL_MIN, PG_POOL_MAX, PG_URL,
+            keepalives=1,
+            keepalives_idle=60,       # Send keepalive after 60s idle
+            keepalives_interval=10,   # Retry every 10s
+            keepalives_count=5,       # Give up after 5 retries
+            connect_timeout=5,        # Connection timeout 5s
+        )
     return _pool
+
+
+def _is_conn_alive(conn) -> bool:
+    """Check if a PostgreSQL connection is still usable."""
+    try:
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.autocommit = False
+        return True
+    except Exception:
+        return False
 
 
 @contextmanager
 def get_db():
-    """Get a PostgreSQL connection (from connection pool), auto commit/rollback"""
+    """Get a PostgreSQL connection (from connection pool), auto commit/rollback.
+    Validates connection health before use — stale connections are discarded
+    and replaced with fresh ones (fixes 'Internal Error' after long idle)."""
     pool = _get_pool()
     conn = pool.getconn()
+
+    # Health check: discard stale connections (killed by firewall/LB after idle)
+    if not _is_conn_alive(conn):
+        logger.warning("Stale PostgreSQL connection detected, replacing with fresh one")
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            pass
+        conn = pool.getconn()
+
     conn.autocommit = False
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
