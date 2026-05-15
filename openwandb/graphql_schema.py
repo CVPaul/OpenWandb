@@ -1,9 +1,10 @@
 """
 OpenWandb v0.5 — GraphQL Schema
-完全兼容 wandb Python SDK 0.16+ / 0.26.x 的 GraphQL 查询和 Mutation
-系统性补全所有 SDK 需要的字段: model, bucket, buckets, wandbConfig,
-cliVersionInfo, serverSettings, files, commit, artifact mutations 等
+Fully compatible with wandb Python SDK 0.16+ / 0.26.x GraphQL queries and mutations.
+Systematically implements all SDK-required fields: model, bucket, buckets, wandbConfig,
+cliVersionInfo, serverSettings, files, commit, artifact mutations, etc.
 """
+import enum
 import json
 import logging
 import uuid
@@ -21,7 +22,7 @@ from openwandb.config import DEFAULT_TEAM_NAME
 logger = logging.getLogger("openwandb.graphql")
 
 # ─────────────────────────────────────────────
-# 自定义标量: JSONString (wandb SDK 使用)
+# Custom scalars: JSONString (used by wandb SDK)
 # ─────────────────────────────────────────────
 JSONString = strawberry.scalar(
     NewType("JSONString", str),
@@ -30,14 +31,26 @@ JSONString = strawberry.scalar(
     parse_value=lambda v: v,
 )
 
+Int64 = strawberry.scalar(
+    NewType("Int64", int),
+    description="64-bit integer",
+    serialize=lambda v: int(v),
+    parse_value=lambda v: int(v),
+)
+
+
+@strawberry.enum
+class ArtifactManifestHashType(enum.Enum):
+    MANIFEST_MD5 = "MANIFEST_MD5"
+
 
 # ─────────────────────────────────────────────
-# Input 类型 (wandb SDK 的 mutation 参数)
+# Input types (wandb SDK mutation parameters)
 # ─────────────────────────────────────────────
 
 @strawberry.input
 class UpsertBucketInput:
-    """wandb SDK upsertBucket mutation 的输入类型 — 包含 SDK 发送的所有字段"""
+    """Input type for wandb SDK upsertBucket mutation — includes all fields sent by the SDK"""
     id: Optional[str] = None
     name: Optional[str] = None
     project: Optional[str] = None
@@ -70,7 +83,7 @@ class UpsertBucketInput:
     code_path_local: Optional[str] = None
 
 
-@strawberry.input
+@strawberry.input(name="ArtifactAliasInput")
 class AliasActionInput:
     """wandb SDK 0.26.x sends aliases as objects, not plain strings"""
     alias: Optional[str] = None
@@ -79,7 +92,7 @@ class AliasActionInput:
 
 @strawberry.input
 class CreateArtifactInput:
-    """wandb SDK createArtifact mutation 输入 — 完全兼容 SDK 0.26.x 发送的所有字段"""
+    """Input for wandb SDK createArtifact mutation — fully compatible with all fields sent by SDK 0.26.x"""
     artifact_type_name: Optional[str] = None
     artifact_collection_name: Optional[str] = None
     artifact_collection_names: Optional[list[str]] = None
@@ -88,14 +101,14 @@ class CreateArtifactInput:
     project_name: Optional[str] = None
     description: Optional[str] = None
     digest: Optional[str] = None
-    digest_algorithm: Optional[str] = None
-    labels: Optional[str] = None
+    digest_algorithm: Optional[ArtifactManifestHashType] = None
+    labels: Optional[JSONString] = None
     aliases: Optional[list[AliasActionInput]] = None
-    metadata: Optional[str] = None
-    client_i_d: Optional[str] = strawberry.field(default=None, name="clientID")
+    metadata: Optional[JSONString] = None
+    client_i_d: Optional[strawberry.ID] = strawberry.field(default=None, name="clientID")
     client_mutation_id: Optional[str] = None
-    sequence_client_i_d: Optional[str] = strawberry.field(default=None, name="sequenceClientID")
-    history_step: Optional[int] = None
+    sequence_client_i_d: Optional[strawberry.ID] = strawberry.field(default=None, name="sequenceClientID")
+    history_step: Optional[Int64] = None
     distributed_i_d: Optional[str] = strawberry.field(default=None, name="distributedID")
     enable_digest_deduplication: Optional[bool] = None
     storage_region: Optional[str] = None
@@ -104,7 +117,7 @@ class CreateArtifactInput:
 
 @strawberry.input
 class CreateRunFilesInput:
-    """wandb SDK createRunFiles mutation 输入"""
+    """Input for wandb SDK createRunFiles mutation"""
     entity_name: Optional[str] = None
     project_name: Optional[str] = None
     run_name: Optional[str] = None
@@ -113,7 +126,7 @@ class CreateRunFilesInput:
 
 @strawberry.input
 class CreateArtifactManifestInput:
-    """wandb SDK createArtifactManifest mutation 输入"""
+    """Input for wandb SDK createArtifactManifest mutation"""
     artifact_id: Optional[str] = None
     base_artifact_id: Optional[str] = None
     entity_name: Optional[str] = None
@@ -127,7 +140,7 @@ class CreateArtifactManifestInput:
 
 @strawberry.input
 class CreateArtifactFileSpecInput:
-    """单个 artifact 文件规格"""
+    """Single artifact file specification"""
     artifact_id: Optional[str] = strawberry.field(default=None, name="artifactID")
     name: Optional[str] = None
     md5: Optional[str] = None
@@ -137,7 +150,7 @@ class CreateArtifactFileSpecInput:
 
 
 # ─────────────────────────────────────────────
-# GraphQL 类型定义
+# GraphQL type definitions
 # ─────────────────────────────────────────────
 
 @strawberry.type(name="ApiKey")
@@ -263,8 +276,8 @@ class ProjectType:
     def bucket(self, name: Optional[str] = None,
                missing_ok: Optional[bool] = None,
                desc: Optional[str] = None) -> Optional["RunType"]:
-        """wandb SDK 旧版用 'bucket' 查询单个 run (= run)
-        missingOk: run 不存在时返回 null; desc: 用于 upload_urls 等"""
+        """wandb SDK legacy uses 'bucket' to query a single run (= run).
+        missingOk: return null if run doesn't exist; desc: used for upload_urls etc."""
         if not name:
             return None
         run = db.get_run(name)
@@ -275,8 +288,13 @@ class ProjectType:
     @strawberry.field
     def buckets(self, first: int = 100, order: Optional[str] = None,
                 filters: Optional[JSONString] = None) -> "RunConnectionType":
-        """wandb SDK 旧版用 'buckets' 列出 runs (= runs)"""
+        """wandb SDK legacy uses 'buckets' to list runs (= runs)"""
         return self.runs(first=first, order=order, filters=filters)
+
+    @strawberry.field
+    def run(self, name: Optional[str] = None) -> Optional["RunType"]:
+        """wandb SDK queries a single run: project.run(name: $runId)"""
+        return self.bucket(name=name)
 
     @strawberry.field
     def artifact(self, name: str) -> Optional["ArtifactCollectionType"]:
@@ -284,17 +302,17 @@ class ProjectType:
 
     @strawberry.field
     def artifact_type(self, name: str = "") -> Optional["ArtifactTypeInfoType"]:
-        """wandb SDK 查询 project 下的 artifact type"""
+        """wandb SDK queries artifact type under a project"""
         return ArtifactTypeInfoType(id="1", name=name or "dataset")
 
     @strawberry.field
     def artifact_collection(self, name: str = "") -> Optional["ArtifactCollectionType"]:
-        """wandb SDK 查询 artifact collection"""
+        """wandb SDK queries artifact collection"""
         return None
 
 
 # ─────────────────────────────────────────────
-# RunType — 包含 wandb SDK 查询的所有字段
+# RunType — includes all fields queried by wandb SDK
 # ─────────────────────────────────────────────
 
 @strawberry.type
@@ -329,7 +347,7 @@ class RunType:
 
     @strawberry.field
     def wandb_config(self, keys: Optional[list[str]] = None) -> Optional[JSONString]:
-        """wandb SDK 查询 wandbConfig(keys: [...])"""
+        """wandb SDK queries wandbConfig(keys: [...])"""
         if keys:
             try:
                 full = json.loads(self._config_json)
@@ -357,26 +375,66 @@ class RunType:
         return None
 
     @strawberry.field
-    def files(self, pattern: Optional[str] = None,
-              names: Optional[list[str]] = None,
+    def files(self, info: Info, pattern: Optional[str] = None,
+              names: Optional[list[Optional[str]]] = None,
               first: int = 1000) -> Optional["FileConnectionType"]:
-        """wandb SDK 查询 run 的文件列表"""
-        file_list = db.list_files(self.name)
+        """wandb SDK queries run file list / RunUploadUrls to get upload URLs.
+        When names are specified, returns upload URLs for each file (even if not yet registered in DB)."""
+        base_url = _get_base_url(info)
         edges = []
-        for f in file_list[:first]:
-            url = f"/files/{self._entity_name}/{self._project_name}/{self.name}/{f['name']}"
-            edges.append(FileEdgeType(
-                node=FileType(
-                    id=str(f["id"]),
-                    name=f["name"],
-                    display_name=f["name"],
-                    direct_url=url,
-                    upload_url=url,
-                    md5=f.get("md5", ""),
-                    size_bytes=f.get("size", 0),
-                    updated_at=f.get("created_at", ""),
-                )
-            ))
+
+        if names:
+            # RunUploadUrls mode: SDK sends list of file names to upload, returns upload URLs
+            file_list = db.list_files(self.name)
+            existing = {f["name"]: f for f in file_list}
+            for fname in names:
+                if not fname:
+                    continue
+                url = f"{base_url}/files/{self._entity_name}/{self._project_name}/{self.name}/{fname}"
+                if fname in existing:
+                    f = existing[fname]
+                    edges.append(FileEdgeType(
+                        node=FileType(
+                            id=str(f["id"]),
+                            name=f["name"],
+                            display_name=f["name"],
+                            direct_url=url,
+                            upload_url=url,
+                            md5=f.get("md5", ""),
+                            size_bytes=f.get("size", 0),
+                            updated_at=f.get("created_at", ""),
+                        )
+                    ))
+                else:
+                    # File not registered — generate upload URL, SDK will PUT to this URL
+                    fid = uuid.uuid4().hex[:8]
+                    edges.append(FileEdgeType(
+                        node=FileType(
+                            id=fid,
+                            name=fname,
+                            display_name=fname,
+                            direct_url=url,
+                            upload_url=url,
+                            upload_headers=[],
+                        )
+                    ))
+        else:
+            # Normal list mode: return all registered files under the run
+            file_list = db.list_files(self.name)
+            for f in file_list[:first]:
+                url = f"{base_url}/files/{self._entity_name}/{self._project_name}/{self.name}/{f['name']}"
+                edges.append(FileEdgeType(
+                    node=FileType(
+                        id=str(f["id"]),
+                        name=f["name"],
+                        display_name=f["name"],
+                        direct_url=url,
+                        upload_url=url,
+                        md5=f.get("md5", ""),
+                        size_bytes=f.get("size", 0),
+                        updated_at=f.get("created_at", ""),
+                    )
+                ))
         return FileConnectionType(edges=edges, upload_headers=[])
 
     @strawberry.field
@@ -446,7 +504,7 @@ class FileType:
 
     @strawberry.field
     def url(self, upload: Optional[bool] = None) -> Optional[str]:
-        """wandb SDK 查询 url(upload: true/false)"""
+        """wandb SDK queries url(upload: true/false)"""
         if upload:
             return self.upload_url or self.direct_url
         return self.direct_url
@@ -469,7 +527,7 @@ class FileConnectionType:
 
 @strawberry.type
 class CliVersionInfoType:
-    """wandb SDK 查询 serverInfo.cliVersionInfo.max_cli_version"""
+    """wandb SDK queries serverInfo.cliVersionInfo.max_cli_version"""
     max_cli_version: Optional[str] = None
 
 
@@ -488,14 +546,17 @@ class ServerMessageType:
     message_level: str = ""
 
 
-@strawberry.type
+@strawberry.type(name="ServerSettings")
 class ServerSettingsType:
-    """wandb SDK 查询 upsertBucket 返回中的 serverSettings"""
+    """wandb SDK queries serverSettings in the upsertBucket response.
+    Note: name="ServerSettings" makes the GraphQL type name match wandb SDK introspection queries.
+    SDK 0.26.x probes server capabilities via __type(name: "ServerSettings")."""
     server_messages: list[ServerMessageType] = strawberry.field(default_factory=list)
 
 
-@strawberry.type
+@strawberry.type(name="ServerInfo")
 class ServerInfoType:
+    """Note: name="ServerInfo" makes the GraphQL type name match wandb SDK introspection queries"""
     local_launch: bool = True
     message_of_the_day: str = ""
 
@@ -508,8 +569,8 @@ class ServerInfoType:
 
     @strawberry.field
     def cli_version_info(self) -> Optional[JSON]:
-        """wandb SDK 查询 cliVersionInfo 时不带子字段选择,
-        因此必须返回 JSON scalar 而非 GraphQL 对象类型."""
+        """wandb SDK queries cliVersionInfo without sub-field selection,
+        so it must return a JSON scalar rather than a GraphQL object type."""
         return {"maxCliVersion": _version}
 
     @strawberry.field
@@ -566,19 +627,40 @@ class ArtifactTypeInfoType:
 @strawberry.type
 class ArtifactSequenceType:
     id: str = "1"
+    name: str = ""
     latest_artifact: Optional["ArtifactType"] = None
 
 
 @strawberry.type
+class ArtifactAliasType:
+    artifact_collection_name: str = ""
+    alias: str = ""
+
+
+@strawberry.type(name="Artifact")
 class ArtifactType:
     id: str
     digest: str = ""
     state: str = "COMMITTED"
+    description: str = ""
+    size: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+    labels: Optional[JSONString] = None
+    metadata: Optional[JSONString] = None
+    file_count: int = 0
+    commit_hash: Optional[str] = None
     current_manifest: Optional["ArtifactManifestType"] = None
+    aliases: list[ArtifactAliasType] = strawberry.field(default_factory=list)
+    version_index: int = 0
 
     @strawberry.field
     def artifact_sequence(self) -> Optional[ArtifactSequenceType]:
         return ArtifactSequenceType(id=self.id, latest_artifact=None)
+
+    @strawberry.field
+    def artifact_type(self) -> Optional["ArtifactTypeInfoType"]:
+        return ArtifactTypeInfoType(id="1", name="dataset")
 
 
 @strawberry.type
@@ -615,7 +697,7 @@ class CreateRunFilesPayload:
 
 
 # ─────────────────────────────────────────────
-# 辅助函数
+# Helper functions
 # ─────────────────────────────────────────────
 
 def _run_to_type(run: dict) -> RunType:
@@ -628,7 +710,7 @@ def _run_to_type(run: dict) -> RunType:
     config_str = run.get("config_json", "{}")
     summary_str = run.get("summary_json", "{}")
 
-    # 查询 entity_name 和 project_name 用于文件 URL
+    # Query entity_name and project_name for file URLs
     entity_name = ""
     project_name = ""
     proj_dict = db.get_project_by_id(run.get("project_id")) if run.get("project_id") else None
@@ -660,7 +742,7 @@ def _run_to_type(run: dict) -> RunType:
 
 
 def _list_projects_by_team(team_id: int, limit: int = 100) -> list[dict]:
-    """列出团队下的项目 — 兼容 SQLite/PostgreSQL"""
+    """List projects under a team — compatible with SQLite/PostgreSQL"""
     with db.get_db() as conn:
         from openwandb.config import DB_BACKEND
         if DB_BACKEND == "postgres":
@@ -685,51 +767,60 @@ def _get_user_from_context(info: Info) -> dict:
 
 
 def _get_base_url(info: Info) -> str:
-    """从 GraphQL context 获取服务器 base URL (wandb SDK 需要完整 URL 来上传文件).
+    """Get server base URL from GraphQL context (wandb SDK requires full URLs for file uploads).
 
-    支持反向代理: 通过 X-Forwarded-* 请求头重建外部 URL.
-    例: https://proxy.example.com/my/prefix/graphql
-        → base_url = https://proxy.example.com/my/prefix
+    Supports reverse proxy: reconstructs external URL via X-Forwarded-* request headers.
+    Example: https://proxy.example.com/my/prefix/graphql
+        -> base_url = https://proxy.example.com/my/prefix
 
-    前缀优先级:
-      1. X-Forwarded-Prefix 请求头 (由反向代理设置)
-      2. ASGI root_path (uvicorn --root-path 传入)
-      3. config.ROOT_PATH (用户通过环境变量 OPENWANDB_ROOT_PATH 或 --root-path CLI 设置)
-      4. Referer header 推断 (最后手段)
+    Priority:
+      0. OPENWANDB_BASE_URL env var (highest priority, full override)
+      1. Auto-detect: x-forwarded-host header present -> request via reverse proxy -> add path prefix
+         No x-forwarded-host header -> SDK direct connection -> no path prefix
+      2. Prefix source: X-Forwarded-Prefix > ASGI root_path > config.ROOT_PATH > inferred from Referer
     """
-    from openwandb.config import ROOT_PATH as cfg_root_path
+    from openwandb.config import BASE_URL as cfg_base_url, ROOT_PATH as cfg_root_path
+
+    # Highest priority: user explicitly specified full URL
+    if cfg_base_url:
+        return cfg_base_url
 
     request = info.context.get("request")
     if not request:
-        # 没有请求上下文, 尽可能用 config 拼一个
+        # No request context, construct one from config as best we can
         if cfg_root_path:
             return f"http://localhost:8080{cfg_root_path}"
         return "http://localhost:8080"
 
-    # 1. 协议: X-Forwarded-Proto > 请求本身
+    # 1. Protocol: X-Forwarded-Proto > request itself
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
 
-    # 2. 主机: X-Forwarded-Host > Host header
+    # 2. Host: X-Forwarded-Host > Host header
     host = (request.headers.get("x-forwarded-host")
             or request.headers.get("host")
             or "localhost:8080")
 
-    # 3. 路径前缀: X-Forwarded-Prefix > ASGI root_path > config ROOT_PATH
-    prefix = (request.headers.get("x-forwarded-prefix")
-              or request.scope.get("root_path", "")
-              or cfg_root_path
-              or "")
-
-    # 4. 如果以上都没拿到前缀, 尝试从 Referer 推断
-    if not prefix:
-        referer = request.headers.get("referer", "")
-        if referer and "/graphql" in referer:
-            # referer = "https://proxy/prefix/graphql" → prefix = "/prefix"
-            from urllib.parse import urlparse
-            parsed = urlparse(referer)
-            idx = parsed.path.find("/graphql")
-            if idx > 0:
-                prefix = parsed.path[:idx]
+    # 3. Path prefix: only added when request comes through a reverse proxy
+    #    When SDK connects directly to K8s Service, the port is exposed directly, no path prefix needed
+    #    Detection: x-forwarded-host header present = went through a reverse proxy
+    is_proxied = "x-forwarded-host" in request.headers
+    if is_proxied:
+        prefix = (request.headers.get("x-forwarded-prefix")
+                  or request.scope.get("root_path", "")
+                  or cfg_root_path
+                  or "")
+        # If none of the above yielded a prefix, try to infer from Referer
+        if not prefix:
+            referer = request.headers.get("referer", "")
+            if referer and "/graphql" in referer:
+                from urllib.parse import urlparse
+                parsed = urlparse(referer)
+                idx = parsed.path.find("/graphql")
+                if idx > 0:
+                    prefix = parsed.path[:idx]
+    else:
+        # Direct connection mode: do not add any path prefix
+        prefix = ""
 
     base = f"{proto}://{host}{prefix}".rstrip("/")
     logger.debug(f"_get_base_url: proto={proto}, host={host}, prefix={prefix} → {base}")
@@ -737,7 +828,7 @@ def _get_base_url(info: Info) -> str:
 
 
 def _resolve_project(name, entity_name, entity):
-    """共享的 project/model 查询逻辑"""
+    """Shared project/model query logic"""
     ent = entity_name or entity or DEFAULT_TEAM_NAME
     proj = db.get_project(ent, name)
     if not proj:
@@ -784,12 +875,28 @@ class Query:
     @strawberry.field
     def model(self, name: Optional[str] = None, entity_name: Optional[str] = None,
               entity: Optional[str] = None) -> Optional[ProjectType]:
-        """wandb SDK 旧版用 'model' 查询项目 (= project)"""
+        """wandb SDK legacy uses 'model' to query a project (= project)"""
         return _resolve_project(name, entity_name, entity)
 
     @strawberry.field
     def server_info(self) -> ServerInfoType:
         return ServerInfoType()
+
+    @strawberry.field
+    def artifact(self, id: Optional[strawberry.ID] = None) -> Optional[ArtifactType]:
+        """wandb SDK queries artifact: query { artifact(id: $id) { ... } }"""
+        if not id:
+            return None
+        # Try to find artifact in DB
+        art = db.get_artifact_by_id(int(id)) if id and id.isdigit() else None
+        if art:
+            return ArtifactType(
+                id=str(art["id"]),
+                digest=art.get("digest", ""),
+                state="COMMITTED",
+            )
+        # Return a placeholder object even if not found, to avoid SDK errors
+        return ArtifactType(id=str(id), digest="", state="COMMITTED")
 
 
 # ─────────────────────────────────────────────
@@ -1045,7 +1152,7 @@ class Mutation:
         result_files = []
         for f in file_list:
             file_id = uuid.uuid4().hex[:8]
-            # 必须返回完整 URL, 否则 wandb SDK 会报 "unsupported protocol scheme"
+            # Must return full URL, otherwise wandb SDK raises "unsupported protocol scheme"
             upload_url = f"{base_url}/files/{entity_name}/{project}/{run_name}/{f}"
             result_files.append(FileType(
                 id=file_id,

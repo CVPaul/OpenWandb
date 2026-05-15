@@ -1,16 +1,16 @@
 """
-OpenWandb — 数据库 dispatcher
-根据 DB_BACKEND 配置自动选择 SQLite 或 PostgreSQL 后端
+OpenWandb — Database dispatcher
+Auto-selects SQLite or PostgreSQL backend based on DB_BACKEND config.
 
-用法:
-    # SQLite (默认):
+Usage:
+    # SQLite (default):
     openwandb serve
 
     # PostgreSQL:
     export OPENWANDB_DB_BACKEND=postgres
     export OPENWANDB_PG_URL=postgresql://user:pass@host:5432/openwandb
     openwandb serve
-    # 或:
+    # Or:
     openwandb serve --pg-url postgresql://user:pass@host:5432/openwandb
 """
 import logging

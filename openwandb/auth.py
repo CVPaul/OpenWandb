@@ -1,6 +1,6 @@
 """
-OpenWandb v0.2 — 认证模块
-支持 JWT (Web UI) + API Key (wandb SDK) 双模认证
+OpenWandb v0.2 — Authentication module
+Supports JWT (Web UI) + API Key (wandb SDK) dual-mode authentication
 """
 import base64
 import datetime
@@ -18,11 +18,11 @@ logger = logging.getLogger("openwandb.auth")
 
 
 # ─────────────────────────────────────────────
-# JWT 工具函数
+# JWT utility functions
 # ─────────────────────────────────────────────
 
 def create_jwt(user: dict) -> str:
-    """创建 JWT token (用于 Web UI cookie 认证)"""
+    """Create JWT token (for Web UI cookie authentication)"""
     teams = db.list_teams_for_user(user["id"])
     default_team = None
     if user.get("default_team_id"):
@@ -43,7 +43,7 @@ def create_jwt(user: dict) -> str:
 
 
 def decode_jwt(token: str) -> Optional[dict]:
-    """解码并验证 JWT token"""
+    """Decode and verify JWT token"""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
@@ -56,19 +56,19 @@ def decode_jwt(token: str) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# API Key 提取 (兼容 wandb SDK)
+# API Key extraction (compatible with wandb SDK)
 # ─────────────────────────────────────────────
 
 def extract_api_key(request: Request) -> Optional[str]:
     """
-    从请求中提取 API Key
-    wandb SDK 使用以下认证方式:
+    Extract API Key from request.
+    wandb SDK uses the following authentication methods:
     1. Authorization: Basic base64(api:KEY)
     2. Authorization: Bearer KEY
     3. X-WANDB-API-KEY: KEY
     4. Query param ?api_key=KEY
     """
-    # 方式 1 & 2: Authorization header
+    # Method 1 & 2: Authorization header
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Basic "):
         try:
@@ -79,16 +79,16 @@ def extract_api_key(request: Request) -> Optional[str]:
             pass
     elif auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
-        # 区分 JWT (包含 '.') 和 API Key
+        # Distinguish JWT (contains '.') from API Key
         if token and "." not in token:
             return token
 
-    # 方式 3: 自定义 header
+    # Method 3: Custom header
     api_key = request.headers.get("x-wandb-api-key")
     if api_key:
         return api_key
 
-    # 方式 4: Query parameter
+    # Method 4: Query parameter
     api_key = request.query_params.get("api_key")
     if api_key:
         return api_key
@@ -98,15 +98,15 @@ def extract_api_key(request: Request) -> Optional[str]:
 
 def extract_jwt_token(request: Request) -> Optional[str]:
     """
-    从请求中提取 JWT token
-    来源优先级: Cookie > Authorization Bearer (含 '.')
+    Extract JWT token from request.
+    Priority: Cookie > Authorization Bearer (containing '.')
     """
-    # 从 cookie 获取 (Web UI 使用)
+    # Get from cookie (used by Web UI)
     token = request.cookies.get("openwandb_token")
     if token:
         return token
 
-    # 从 Authorization Bearer 获取 (含 '.' 的是 JWT)
+    # Get from Authorization Bearer (tokens containing '.' are JWT)
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
@@ -117,17 +117,17 @@ def extract_jwt_token(request: Request) -> Optional[str]:
 
 
 # ─────────────────────────────────────────────
-# 统一认证: 返回当前用户 (or None)
+# Unified authentication: return current user (or None)
 # ─────────────────────────────────────────────
 
 def get_current_user(request: Request) -> Optional[dict]:
     """
-    从请求中识别当前用户 (自动处理 JWT 和 API Key)
+    Identify current user from request (automatically handles JWT and API Key).
 
-    返回用户 dict (含 id, username, default_team_id 等), 或 None (未认证)
-    同时向 user dict 注入 'entity' 字段 (= default team name) 以兼容旧逻辑
+    Returns user dict (with id, username, default_team_id, etc.), or None (unauthenticated).
+    Also injects 'entity' field (= default team name) into user dict for backward compatibility.
     """
-    # 1. 尝试 API Key (wandb SDK 优先)
+    # 1. Try API Key (wandb SDK takes priority)
     api_key = extract_api_key(request)
     if api_key:
         user = db.verify_api_key(api_key)
@@ -136,7 +136,7 @@ def get_current_user(request: Request) -> Optional[dict]:
             logger.debug(f"Authenticated via API Key: {user['username']}")
             return user
 
-    # 2. 尝试 JWT (Web UI)
+    # 2. Try JWT (Web UI)
     jwt_token = extract_jwt_token(request)
     if jwt_token:
         payload = decode_jwt(jwt_token)
@@ -151,8 +151,8 @@ def get_current_user(request: Request) -> Optional[dict]:
 
 
 def _enrich_user(user: dict) -> dict:
-    """为用户 dict 添加便捷字段"""
-    # 获取默认团队名 (= entity)
+    """Add convenience fields to user dict"""
+    # Get default team name (= entity)
     if user.get("default_team_id"):
         team = db.get_team_by_id(user["default_team_id"])
         if team:
@@ -165,7 +165,7 @@ def _enrich_user(user: dict) -> dict:
         user["entity"] = DEFAULT_TEAM_NAME
         user["default_team_name"] = DEFAULT_TEAM_NAME
 
-    # 获取用户所属团队列表
+    # Get list of teams the user belongs to
     teams = db.list_teams_for_user(user["id"])
     user["teams"] = [t["name"] for t in teams]
 
@@ -173,24 +173,24 @@ def _enrich_user(user: dict) -> dict:
 
 
 # ─────────────────────────────────────────────
-# 认证中间件 / 装饰器
+# Authentication middleware / decorators
 # ─────────────────────────────────────────────
 
 def authenticate(request: Request) -> dict:
     """
-    兼容旧接口: 认证请求并返回用户信息
-    如果未认证, 返回默认管理员 (宽松模式, 保证 SDK 向后兼容)
+    Backward-compatible interface: authenticate request and return user info.
+    If unauthenticated, returns default admin (permissive mode for SDK backward compatibility).
     """
     user = get_current_user(request)
     if user:
         return user
 
-    # 未认证时返回默认管理员 (保持 wandb SDK 兼容性)
+    # Return default admin when unauthenticated (maintain wandb SDK compatibility)
     admin = db.get_user_by_username("admin")
     if admin:
         return _enrich_user(admin)
 
-    # 绝对后备
+    # Absolute fallback
     return {
         "id": 1,
         "username": "admin",
@@ -202,8 +202,8 @@ def authenticate(request: Request) -> dict:
 
 def require_auth(request: Request) -> dict:
     """
-    严格认证: 必须登录, 否则 401
-    用于需要权限控制的 API 端点
+    Strict authentication: must be logged in, otherwise 401.
+    Used for API endpoints that require access control.
     """
     user = get_current_user(request)
     if not user:
@@ -213,8 +213,8 @@ def require_auth(request: Request) -> dict:
 
 def require_team_role(request: Request, team_id: int, min_role: str = "member") -> dict:
     """
-    要求用户拥有指定团队中的最低角色
-    角色层级: owner > admin > member > viewer
+    Require user to have a minimum role in the specified team.
+    Role hierarchy: owner > admin > member > viewer
     """
     user = require_auth(request)
     role = db.get_user_team_role(user["id"], team_id)
@@ -230,7 +230,7 @@ def require_team_role(request: Request, team_id: int, min_role: str = "member") 
 
 
 def require_project_access(request: Request, project_id: int) -> dict:
-    """要求用户有项目读权限"""
+    """Require user to have project read access"""
     user = require_auth(request)
     if not db.user_can_access_project(user["id"], project_id):
         raise HTTPException(status_code=403, detail="No access to this project")
@@ -238,7 +238,7 @@ def require_project_access(request: Request, project_id: int) -> dict:
 
 
 def require_project_write(request: Request, project_id: int) -> dict:
-    """要求用户有项目写权限"""
+    """Require user to have project write access"""
     user = require_auth(request)
     if not db.user_can_write_project(user["id"], project_id):
         raise HTTPException(status_code=403, detail="No write access to this project")
@@ -246,13 +246,13 @@ def require_project_write(request: Request, project_id: int) -> dict:
 
 
 # ─────────────────────────────────────────────
-# 分享链接认证
+# Share link authentication
 # ─────────────────────────────────────────────
 
 def check_share_access(request: Request, resource_type: str, resource_id: int) -> bool:
     """
-    检查是否通过分享链接访问
-    查询参数 ?share_token=xxx 或 cookie
+    Check if access is via a share link.
+    Query parameter ?share_token=xxx or cookie.
     """
     token = request.query_params.get("share_token") or request.cookies.get("share_token")
     if not token:
@@ -267,18 +267,18 @@ def check_share_access(request: Request, resource_type: str, resource_id: int) -
 
 def get_optional_user(request: Request) -> Optional[dict]:
     """
-    可选认证: 返回用户或 None (不抛异常)
-    用于公开页面 (需要知道是否登录来显示导航栏等)
+    Optional authentication: return user or None (no exception raised).
+    Used for public pages (need to know login status for navigation bar, etc.).
     """
     return get_current_user(request)
 
 
 # ─────────────────────────────────────────────
-# Cookie 工具
+# Cookie utilities
 # ─────────────────────────────────────────────
 
 def set_auth_cookie(response: Response, token: str):
-    """设置认证 cookie"""
+    """Set authentication cookie"""
     response.set_cookie(
         key="openwandb_token",
         value=token,
@@ -290,7 +290,7 @@ def set_auth_cookie(response: Response, token: str):
 
 
 def clear_auth_cookie(response: Response):
-    """清除认证 cookie"""
+    """Clear authentication cookie"""
     response.delete_cookie(
         key="openwandb_token",
         path="/",

@@ -1,5 +1,5 @@
 """
-OpenWandb — 文件与 Artifact 存储模块
+OpenWandb — File and Artifact storage module
 """
 import hashlib
 import os
@@ -10,7 +10,7 @@ from openwandb.config import ARTIFACTS_DIR, FILES_DIR
 
 
 def get_run_files_dir(entity: str, project: str, run_id: str) -> Path:
-    """获取运行的文件存储目录"""
+    """Get the file storage directory for a run"""
     d = FILES_DIR / entity / project / run_id
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -18,7 +18,7 @@ def get_run_files_dir(entity: str, project: str, run_id: str) -> Path:
 
 def save_file(entity: str, project: str, run_id: str,
               filename: str, content: bytes) -> dict:
-    """保存文件, 返回文件信息"""
+    """Save file and return file info"""
     run_dir = get_run_files_dir(entity, project, run_id)
     filepath = run_dir / filename
     filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,7 @@ def save_file(entity: str, project: str, run_id: str,
 
 def read_file(entity: str, project: str, run_id: str,
               filename: str) -> Optional[bytes]:
-    """读取文件"""
+    """Read file"""
     filepath = FILES_DIR / entity / project / run_id / filename
     if filepath.exists():
         return filepath.read_bytes()
@@ -45,7 +45,7 @@ def read_file(entity: str, project: str, run_id: str,
 
 def append_file(entity: str, project: str, run_id: str,
                 filename: str, content: str):
-    """追加内容到文件 (用于日志等)"""
+    """Append content to file (for logs, etc.)"""
     run_dir = get_run_files_dir(entity, project, run_id)
     filepath = run_dir / filename
     with open(filepath, "a", encoding="utf-8") as f:
@@ -53,14 +53,14 @@ def append_file(entity: str, project: str, run_id: str,
 
 
 def get_artifact_dir(entity: str, project: str, artifact_name: str) -> Path:
-    """获取 Artifact 存储目录"""
+    """Get the Artifact storage directory"""
     d = ARTIFACTS_DIR / entity / project / artifact_name
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def list_run_files(entity: str, project: str, run_id: str) -> list[dict]:
-    """列出运行的所有文件"""
+    """List all files for a run"""
     run_dir = FILES_DIR / entity / project / run_id
     if not run_dir.exists():
         return []

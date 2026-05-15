@@ -1,61 +1,67 @@
 # OpenWandb
 
-**开源的 WandB (Weights & Biases) 兼容服务器** — 完全替代 wandb 闭源服务端，支持私有部署。
+**Open-source, self-hosted WandB (Weights & Biases) compatible server** — a drop-in replacement for the proprietary wandb server, designed for private deployment.
 
-用户只需设置 `WANDB_BASE_URL` 环境变量，即可将现有训练代码**无缝迁移**到自建服务器，无需修改任何训练脚本。
+Just set `WANDB_BASE_URL` and your existing training scripts work seamlessly with your own server — zero code changes required.
 
-## 核心特性
+[![PyPI version](https://badge.fury.io/py/openwandb.svg)](https://pypi.org/project/openwandb/)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-- **完全兼容 wandb Python SDK** — 实现 GraphQL API + File Stream 协议
-- **pip install 一键部署** — `pip install openwandb && openwandb serve`
-- **CLI 管理工具** — `openwandb serve / init / version`
-- **多租户隔离** — Team → Project → Run 三级权限继承
-- **用户管理** — 注册/登录、JWT + API Key 双模认证
-- **团队协作** — 创建团队、邀请成员、角色管理 (Owner/Admin/Member/Viewer)
-- **分享功能** — 项目/运行级别的 Token 分享链接
-- **Web 可视化仪表盘** — 深色主题 UI，ECharts 图表引擎
-- **零配置** — SQLite 数据库 + 本地文件存储，无需 Docker/K8s
+## Features
 
-## 快速开始
+- **Fully compatible with wandb Python SDK** — implements GraphQL API + File Stream protocol
+- **One-command deployment** — `pip install openwandb && openwandb serve`
+- **Built-in CLI** — `openwandb serve / init / demo / version`
+- **Multi-tenant isolation** — Team → Project → Run three-level permission hierarchy
+- **User management** — Registration/login, JWT + API Key dual authentication
+- **Team collaboration** — Create teams, invite members, role management (Owner/Admin/Member/Viewer)
+- **Sharing** — Project/run-level token-based share links
+- **Web dashboard** — Dark-theme UI with ECharts visualization engine
+- **Zero configuration** — SQLite database + local file storage, no Docker/K8s required
+- **PostgreSQL support** — Optional PostgreSQL backend for production scale
+- **Reverse proxy ready** — Full support for K8s ingress / Nginx with path prefixes
+- **Media & Artifacts** — `wandb.Image`, `wandb.Table`, `wandb.Artifact` all supported
 
-### 方式一: pip install (推荐)
+## Quick Start
+
+### Install from PyPI (recommended)
 
 ```bash
 pip install openwandb
 
-# 启动服务 (数据默认存储在 ~/.openwandb/)
+# Start the server (data stored in ~/.openwandb/ by default)
 openwandb serve
 
-# 自定义端口和数据目录
+# Customize port and data directory
 openwandb serve --port 9090 --data-dir /data/openwandb
 ```
 
-### 方式二: 源码运行 (开发模式)
+### Install from source (development)
 
 ```bash
 git clone https://github.com/CVPaul/OpenWandb.git
 cd OpenWandb
 
-# 开发模式安装
+# Editable install
 pip install -e .
 openwandb serve
 
-# 或直接运行 (数据存储在 ./data/)
+# Or run directly (data stored in ./data/)
 python run_server.py
 ```
 
-服务默认运行在 `http://localhost:8080`，默认管理员账号: `admin` / `admin123`
+The server runs at `http://localhost:8080` by default.
+Default admin credentials: `admin` / `admin123` (change via environment variables in production).
 
-### 配置训练脚本
+### Configure your training script
 
-只需设置两个环境变量：
+Set two environment variables and run your training script as usual:
 
 ```bash
 export WANDB_BASE_URL=http://localhost:8080
 export WANDB_API_KEY=local0000000000000000000000000000000000000000
 ```
-
-然后正常运行你的训练脚本即可！
 
 ```python
 import wandb
@@ -69,215 +75,261 @@ for step in range(100):
 wandb.finish()
 ```
 
-### 管理 API Key
+### Run the built-in demo
 
-1. 登录 Web UI → Settings → API Keys
-2. 创建新的 API Key
-3. 使用新 Key 替代默认 Key:
+OpenWandb ships with a full MNIST demo that showcases all wandb features:
+
+```bash
+# Default mode: pure NumPy (no PyTorch needed!)
+openwandb demo
+
+# PyTorch Lightning mode
+openwandb demo --lightning
+
+# Customize runs and epochs
+openwandb demo --runs 5 --epochs 50
+```
+
+The demo showcases: `wandb.log()`, `wandb.Image`, `wandb.Table`, `wandb.Artifact`, namespace grouping, multi-run comparison, and more.
+
+### Manage API Keys
+
+1. Log in to the Web UI → Settings → API Keys
+2. Create a new API Key
+3. Use the new key in your scripts:
    ```bash
    export WANDB_API_KEY=local-xxxxxxxxxxxxxxxxxxxx
    ```
 
-## CLI 命令
+## CLI Reference
 
 ```bash
-# 启动服务器
+# Start the server
 openwandb serve [OPTIONS]
-  --host TEXT          监听地址 (默认: 0.0.0.0)
-  --port/-p INT        端口 (默认: 8080)
-  --data-dir PATH      数据目录 (默认: ~/.openwandb)
-  --log-level TEXT     日志级别: debug/info/warning/error
-  --reload             开发模式热重载
+  --host TEXT          Bind address (default: 0.0.0.0)
+  --port/-p INT        Port (default: 8080)
+  --data-dir PATH      Data directory (default: ~/.openwandb)
+  --log-level TEXT     Log level: debug/info/warning/error
+  --reload             Enable auto-reload (dev mode)
+  --root-path TEXT     URL path prefix for reverse proxy
+  --base-url TEXT      Full external URL override for file uploads
+  --db TEXT            Database backend: sqlite/postgres
+  --pg-url TEXT        PostgreSQL connection URL
 
-# 初始化数据目录和数据库
-openwandb init [--data-dir PATH]
+# Initialize data directory and database
+openwandb init [--data-dir PATH] [--pg-url URL]
 
-# 显示版本
+# Run MNIST demo
+openwandb demo [--lightning] [--runs N] [--epochs N] [--no-run]
+
+# Show version
 openwandb version
 
-# 也支持 python -m 方式运行
+# Also supports python -m
 python -m openwandb serve
 ```
 
-## 多租户使用
+## Multi-Tenancy
 
-### 创建团队
+### Create a team
 
-1. 登录 → Settings → Teams → Create New Team
-2. 邀请成员加入团队
-3. 设置成员角色 (Viewer / Member / Admin)
+1. Log in → Settings → Teams → Create New Team
+2. Invite members to the team
+3. Set member roles (Viewer / Member / Admin)
 
-### 团队项目
+### Team projects
 
-通过 wandb SDK 的 `entity` 参数指定团队:
+Specify the team via the `entity` parameter in wandb SDK:
 
 ```python
 wandb.init(project="my-project", entity="my-team")
 ```
 
-### 项目可见性
+### Project visibility
 
-| 可见性 | 说明 |
-|--------|------|
-| **Private** | 仅创建者可见 |
-| **Team** | 团队成员可见 (默认) |
-| **Public** | 所有人可见 |
+| Visibility | Description |
+|------------|-------------|
+| **Private** | Only the creator can access |
+| **Team** | Team members can access (default) |
+| **Public** | Everyone can access |
 
-### 分享
+### Sharing
 
-在项目页或运行页点击 "Share" 按钮，生成公开链接。任何人可通过链接查看 (只读)。
+Click the "Share" button on any project or run page to generate a public link. Anyone with the link can view (read-only).
 
-## 运行示例
+## Configuration
 
-### 快速演示 (模拟数据, 无需 GPU)
+All settings are configurable via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENWANDB_DATA_DIR` | `~/.openwandb` | Data storage directory |
+| `OPENWANDB_HOST` | `0.0.0.0` | Bind address |
+| `OPENWANDB_PORT` | `8080` | Listen port |
+| `OPENWANDB_JWT_SECRET` | Random | JWT signing secret |
+| `OPENWANDB_JWT_EXPIRE_HOURS` | `72` | JWT expiration (hours) |
+| `OPENWANDB_ADMIN_USER` | `admin` | Default admin username |
+| `OPENWANDB_ADMIN_PASS` | `admin123` | Default admin password |
+| `OPENWANDB_DEFAULT_TEAM` | `default` | Default team name |
+| `OPENWANDB_ALLOW_REGISTRATION` | `true` | Allow new user registration |
+| `OPENWANDB_MAX_FILE_SIZE` | `500MB` | Maximum file upload size |
+| `OPENWANDB_LOG_LEVEL` | `INFO` | Log level |
+| `OPENWANDB_DB_BACKEND` | `sqlite` | Database backend (`sqlite` or `postgres`) |
+| `OPENWANDB_PG_URL` | | PostgreSQL connection URL |
+| `OPENWANDB_ROOT_PATH` | | URL path prefix for reverse proxy |
+| `OPENWANDB_BASE_URL` | | Full external URL override for uploads |
+
+## Deployment
+
+### Basic (single machine)
 
 ```bash
-# 终端 1: 启动服务器
-openwandb serve
-
-# 终端 2: 运行模拟训练
-python examples/example_train.py
+pip install openwandb
+openwandb serve --port 8080 --data-dir /data/openwandb
 ```
 
-### MLP 真实训练 (MNIST 手写数字识别)
-
-一个完整的 PyTorch 训练脚本，用 MLP 识别手写数字，全程用 wandb 记录：
+### With PostgreSQL
 
 ```bash
-# 安装 PyTorch (如果还没有)
-pip install torch torchvision
-
-# 终端 1: 启动服务器
-openwandb serve
-
-# 终端 2: 运行训练 (默认参数)
-python examples/example_mlp.py
-
-# 修改超参数再跑一次, 然后在 Web UI 中对比两次实验!
-python examples/example_mlp.py --lr 0.01 --hidden 128 --optimizer sgd --epochs 10
+openwandb serve --pg-url postgresql://user:pass@db-host:5432/openwandb
 ```
 
-脚本会自动下载 MNIST 数据集、训练模型、并将所有指标上传到 OpenWandb。
-打开 `http://localhost:8080` → 进入 `mnist-mlp` 项目 → 查看曲线图、对比不同实验。
+### Behind a reverse proxy (Nginx / K8s Ingress)
 
-## Web 仪表盘
+When deploying behind a reverse proxy with a URL path prefix:
 
-| 页面 | 功能 |
-|------|------|
-| **首页** | 项目列表、团队切换、搜索、统计概览 |
-| **项目页** | 运行列表、状态过滤、排序、分享、可见性控制 |
-| **运行详情** | 指标图表、配置查看、Summary、系统监控、分享 |
-| **运行对比** | 多运行指标叠加图、超参数差异对比 |
-| **登录/注册** | 用户登录、新用户注册 |
-| **设置** | 个人信息、API Key 管理、团队列表 |
-| **团队管理** | 成员列表、邀请、角色修改、团队项目 |
+```bash
+# The server auto-detects the prefix from X-Forwarded-* headers
+openwandb serve --root-path /my/prefix
+```
 
-## API 端点
+**K8s deployment example:**
 
-### wandb SDK 兼容端点
+```yaml
+containers:
+  - name: openwandb
+    image: python:3.12-slim
+    command: ["openwandb", "serve", "--root-path", "/my/prefix"]
+    env:
+      - name: OPENWANDB_DATA_DIR
+        value: "/data/openwandb"
+      # Optional: override upload URL if headers aren't forwarded correctly
+      # - name: OPENWANDB_BASE_URL
+      #   value: "https://my-domain.com/my/prefix"
+```
 
-| 端点 | 说明 |
-|------|------|
-| `POST /graphql` | GraphQL API (wandb SDK 核心通信) |
-| `POST /files/{entity}/{project}/{run}/file_stream` | 指标流上传 |
-| `GET /files/{entity}/{project}/{run}/{filename}` | 文件下载 |
-| `PUT /files/{entity}/{project}/{run}/{filename}` | 文件上传 |
+The server automatically distinguishes between direct SDK access (internal service) and browser access (through ingress) to generate correct file upload URLs.
 
-### 认证 API
+### Diagnostic endpoint
 
-| 端点 | 说明 |
-|------|------|
-| `POST /api/v2/auth/register` | 用户注册 |
-| `POST /api/v2/auth/login` | 用户登录 (返回 JWT) |
-| `POST /api/v2/auth/logout` | 用户登出 |
-| `GET /api/v2/auth/me` | 获取当前用户信息 |
-
-### 团队管理 API
-
-| 端点 | 说明 |
-|------|------|
-| `GET /api/v2/teams` | 我的团队列表 |
-| `POST /api/v2/teams` | 创建团队 |
-| `GET /api/v2/teams/{name}/members` | 成员列表 |
-| `POST /api/v2/teams/{name}/members` | 邀请成员 |
-| `PUT /api/v2/teams/{name}/members/{uid}` | 修改角色 |
-| `DELETE /api/v2/teams/{name}/members/{uid}` | 移除成员 |
-
-### API Key 管理
-
-| 端点 | 说明 |
-|------|------|
-| `GET /api/v2/settings/api-keys` | 我的 API Key 列表 |
-| `POST /api/v2/settings/api-keys` | 创建新 Key (返回明文) |
-| `DELETE /api/v2/settings/api-keys/{id}` | 删除 Key |
-
-### 分享 API
-
-| 端点 | 说明 |
-|------|------|
-| `POST /api/v2/share` | 创建分享链接 |
-| `GET /api/v2/share/{token}` | 通过 token 访问 |
-| `DELETE /api/v2/share/{id}` | 撤销分享 |
-| `GET /s/{token}` | 分享链接入口 (自动跳转) |
-
-### 内部 REST API
-
-| 端点 | 说明 |
-|------|------|
-| `GET /api/v2/projects` | 项目列表 (按权限过滤) |
-| `GET /api/v2/projects/{entity}/{project}/runs` | 运行列表 |
-| `GET /api/v2/runs/{run_id}/metrics` | 指标数据 |
-| `GET /api/v2/runs/{run_id}/system_metrics` | 系统指标 |
-| `PUT /api/v2/projects/{id}/visibility` | 修改可见性 |
-
-## 配置
-
-通过环境变量配置：
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `OPENWANDB_DATA_DIR` | `~/.openwandb` | 数据存储目录 |
-| `OPENWANDB_HOST` | `0.0.0.0` | 监听地址 |
-| `OPENWANDB_PORT` | `8080` | 监听端口 |
-| `OPENWANDB_JWT_SECRET` | 随机生成 | JWT 签名密钥 |
-| `OPENWANDB_JWT_EXPIRE_HOURS` | `72` | JWT 过期时间 (小时) |
-| `OPENWANDB_ADMIN_USER` | `admin` | 默认管理员用户名 |
-| `OPENWANDB_ADMIN_PASS` | `admin123` | 默认管理员密码 |
-| `OPENWANDB_DEFAULT_TEAM` | `default` | 默认团队名 |
-| `OPENWANDB_ALLOW_REGISTRATION` | `true` | 是否允许注册 |
-| `OPENWANDB_MAX_FILE_SIZE` | `500MB` | 最大文件上传大小 |
-| `OPENWANDB_LOG_LEVEL` | `INFO` | 日志级别 |
-
-## 权限模型
+Use the built-in debug endpoint to verify reverse proxy configuration:
 
 ```
-Team (组织/团队)
-├── Owner   — 完全控制 (删除团队、管理成员角色)
-├── Admin   — 管理成员 (邀请/移除成员)
-├── Member  — 读写 (创建项目、记录 runs)
-└── Viewer  — 只读 (查看项目和 runs)
+GET /api/v1/debug/headers
+```
+
+Returns the computed base URL, detected headers, and proxy status.
+
+## API Endpoints
+
+### wandb SDK compatible endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /graphql` | GraphQL API (wandb SDK core communication) |
+| `POST /files/{entity}/{project}/{run}/file_stream` | Metrics stream upload |
+| `GET /files/{entity}/{project}/{run}/{filename}` | File download |
+| `PUT /files/{entity}/{project}/{run}/{filename}` | File upload |
+
+### Authentication API
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v2/auth/register` | User registration |
+| `POST /api/v2/auth/login` | User login (returns JWT) |
+| `POST /api/v2/auth/logout` | User logout |
+| `GET /api/v2/auth/me` | Get current user info |
+
+### Team Management API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v2/teams` | List my teams |
+| `POST /api/v2/teams` | Create a team |
+| `GET /api/v2/teams/{name}/members` | List members |
+| `POST /api/v2/teams/{name}/members` | Invite member |
+| `PUT /api/v2/teams/{name}/members/{uid}` | Update role |
+| `DELETE /api/v2/teams/{name}/members/{uid}` | Remove member |
+
+### API Key Management
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v2/settings/api-keys` | List my API keys |
+| `POST /api/v2/settings/api-keys` | Create new key (returns plaintext once) |
+| `DELETE /api/v2/settings/api-keys/{id}` | Delete key |
+
+### Sharing API
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v2/share` | Create share link |
+| `GET /api/v2/share/{token}` | Access via token |
+| `DELETE /api/v2/share/{id}` | Revoke share link |
+| `GET /s/{token}` | Share link entry (auto-redirect) |
+
+### Internal REST API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v2/projects` | List projects (filtered by permission) |
+| `GET /api/v2/projects/{entity}/{project}/runs` | List runs |
+| `GET /api/v2/runs/{run_id}/metrics` | Get metric data |
+| `GET /api/v2/runs/{run_id}/system_metrics` | Get system metrics |
+| `PUT /api/v2/projects/{id}/visibility` | Update visibility |
+
+## Web Dashboard
+
+| Page | Features |
+|------|----------|
+| **Home** | Project list, team switcher, search, stats overview |
+| **Project** | Run list, status filter, sort, share, visibility control |
+| **Run Detail** | Metric charts, config viewer, summary, system monitoring, media |
+| **Run Compare** | Multi-run metric overlay, hyperparameter diff |
+| **Login/Register** | User login, new user registration |
+| **Settings** | Profile, API key management, team list |
+| **Team** | Member list, invite, role management, team projects |
+
+## Permission Model
+
+```
+Team (Organization)
+├── Owner   — Full control (delete team, manage roles)
+├── Admin   — Manage members (invite/remove)
+├── Member  — Read/write (create projects, log runs)
+└── Viewer  — Read-only (view projects and runs)
 
 Project
-├── Private  — 仅创建者
-├── Team     — 团队成员 (默认)
-└── Public   — 所有人
+├── Private  — Creator only
+├── Team     — Team members (default)
+└── Public   — Everyone
 
-Run → 继承所属 Project 的权限
+Run → Inherits permissions from its parent project
 ```
 
-## 技术架构
+## Architecture
 
 ```
 ┌──────────────────┐         ┌──────────────────────────┐
 │  wandb Python SDK │ ──────> │     FastAPI Server        │
-│  (训练脚本中)      │  HTTP   │                          │
+│  (training script)│  HTTP   │                          │
 └──────────────────┘         │  ┌── Auth Middleware ──┐   │
                              │  │ JWT + API Key       │   │
 ┌──────────────────┐         │  └─────────────────────┘   │
 │  Web Dashboard    │ ──────> │                          │
-│  (浏览器)         │  HTTP   │  ┌── GraphQL ──────────┐  │
-└──────────────────┘         │  │ upsertBucket (+ ACL) │  │
-                             │  │ viewer               │  │
+│  (browser)        │  HTTP   │  ┌── GraphQL ──────────┐  │
+└──────────────────┘         │  │ Strawberry GraphQL   │  │
+                             │  │ (wandb SDK compat)   │  │
                              │  └──────────────────────┘  │
                              │  ┌── REST API ──────────┐  │
                              │  │ Auth / Teams / Share  │  │
@@ -285,48 +337,59 @@ Run → 继承所属 Project 的权限
                              │  └──────────────────────┘  │
                              │         │                  │
                              │    ┌────▼────┐             │
-                             │    │ SQLite  │             │
-                             │    │ + ACL   │             │
+                             │    │ SQLite  │  (or Postgres)
+                             │    │ + Files │             │
                              │    └─────────┘             │
                              └────────────────────────────┘
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 open-wandb/
-├── pyproject.toml             # 包配置 (pip install)
-├── run_server.py              # 开发模式启动脚本
+├── pyproject.toml             # Package config (hatchling)
+├── run_server.py              # Dev mode startup script
 ├── examples/
-│   ├── example_train.py       # 模拟训练示例
-│   └── example_mlp.py         # MNIST MLP 真实训练示例
-├── openwandb/                 # Python 包
-│   ├── __init__.py            # 版本号
+│   ├── example_train.py       # Mock training example
+│   └── example_mlp.py         # MNIST MLP training example
+├── openwandb/                 # Python package
+│   ├── __init__.py            # Version
 │   ├── __main__.py            # python -m openwandb
-│   ├── cli.py                 # CLI 命令 (serve/init/version)
-│   ├── config.py              # 服务配置 (路径/环境变量)
-│   ├── server.py              # FastAPI 主入口 + 所有路由
-│   ├── database.py            # SQLite 数据库 + 多租户权限
-│   ├── graphql_schema.py      # GraphQL schema (wandb SDK 兼容)
-│   ├── file_stream.py         # file_stream 处理
-│   ├── storage.py             # 文件存储管理
-│   ├── auth.py                # JWT + API Key 双模认证
-│   ├── templates/             # Web UI 模板 (7 页面)
-│   └── static/style.css       # 全局样式
-├── LICENSE                    # MIT License
-└── .gitignore
+│   ├── cli.py                 # CLI commands (serve/init/demo/version)
+│   ├── config.py              # Configuration (paths/env vars)
+│   ├── server.py              # FastAPI main app + all routes
+│   ├── database.py            # DB dispatcher (SQLite/Postgres)
+│   ├── _db_sqlite.py          # SQLite backend
+│   ├── _db_postgres.py        # PostgreSQL backend
+│   ├── graphql_schema.py      # GraphQL schema (wandb SDK compat)
+│   ├── file_stream.py         # File stream handler
+│   ├── storage.py             # File/artifact storage
+│   ├── auth.py                # JWT + API Key authentication
+│   ├── templates/             # Web UI templates (7 pages)
+│   └── static/                # CSS + JS assets
+├── tests/                     # Test suite
+└── LICENSE                    # CC BY-NC 4.0 License
 ```
 
-## 贡献
+## Contributing
 
-欢迎贡献代码！请遵循以下步骤:
+Contributions are welcome! Please follow these steps:
 
-1. Fork 本仓库
-2. 创建特性分支: `git checkout -b feature/your-feature`
-3. 提交更改: `git commit -m 'Add your feature'`
-4. 推送到分支: `git push origin feature/your-feature`
-5. 提交 Pull Request
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes: `git commit -m 'Add your feature'`
+4. Push to the branch: `git push origin feature/your-feature`
+5. Open a Pull Request
+
+### Development setup
+
+```bash
+git clone https://github.com/CVPaul/OpenWandb.git
+cd OpenWandb
+pip install -e ".[dev]"
+pytest
+```
 
 ## License
 
-MIT
+This project is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — free for non-commercial use. Commercial use requires a separate license agreement.

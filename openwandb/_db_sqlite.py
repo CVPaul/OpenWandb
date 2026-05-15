@@ -1,6 +1,6 @@
 """
-OpenWandb v0.2 — 数据库模块
-多租户隔离: Team → Project → Run 三级权限继承
+OpenWandb v0.2 — Database module
+Multi-tenant isolation: Team → Project → Run three-level permission hierarchy
 """
 import json
 import secrets
@@ -14,7 +14,7 @@ from openwandb.config import DB_PATH
 
 
 # ─────────────────────────────────────────────
-# 工具函数
+# Utility functions
 # ─────────────────────────────────────────────
 
 def _now_iso() -> str:
@@ -31,11 +31,11 @@ def _gen_token(n: int = 32) -> str:
 
 
 # ─────────────────────────────────────────────
-# 数据库 Schema
+# Database Schema
 # ─────────────────────────────────────────────
 
 _SCHEMA = """
--- 用户
+-- Users
 CREATE TABLE IF NOT EXISTS users (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     username        TEXT    NOT NULL UNIQUE,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at      TEXT    NOT NULL
 );
 
--- 团队 (对应 wandb entity, 多租户隔离单元)
+-- Teams (corresponds to wandb entity, multi-tenant isolation unit)
 CREATE TABLE IF NOT EXISTS teams (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT    NOT NULL UNIQUE,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS teams (
     created_at      TEXT    NOT NULL
 );
 
--- 团队成员 (多对多, 带角色)
+-- Team members (many-to-many, with roles)
 CREATE TABLE IF NOT EXISTS team_members (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     team_id     INTEGER NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS team_members (
     UNIQUE(team_id, user_id)
 );
 
--- API Keys (用户级, 支持 wandb SDK 认证)
+-- API Keys (user-level, supports wandb SDK authentication)
 CREATE TABLE IF NOT EXISTS api_keys (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL,
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- 项目
+-- Projects
 CREATE TABLE IF NOT EXISTS projects (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     team_id     INTEGER NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS projects (
     UNIQUE(team_id, name)
 );
 
--- 运行
+-- Runs
 CREATE TABLE IF NOT EXISTS runs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id      INTEGER NOT NULL,
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS runs (
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 
--- 指标
+-- Metrics
 CREATE TABLE IF NOT EXISTS metrics (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id      TEXT    NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS metrics (
     wall_time   REAL    NOT NULL
 );
 
--- 系统指标
+-- System metrics
 CREATE TABLE IF NOT EXISTS system_metrics (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id      TEXT    NOT NULL,
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     created_at      TEXT    NOT NULL
 );
 
--- 文件
+-- Files
 CREATE TABLE IF NOT EXISTS files (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id      TEXT    NOT NULL,
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS files (
     created_at  TEXT    NOT NULL
 );
 
--- 分享链接
+-- Share links
 CREATE TABLE IF NOT EXISTS share_links (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     token           TEXT    NOT NULL UNIQUE,
@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS share_links (
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
--- 索引
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_metrics_run_key ON metrics(run_id, key);
 CREATE INDEX IF NOT EXISTS idx_metrics_run_step ON metrics(run_id, step);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_run ON system_metrics(run_id);
@@ -182,18 +182,18 @@ CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
 
 
 # ─────────────────────────────────────────────
-# 数据库连接
+# Database connection
 # ─────────────────────────────────────────────
 
 def init_db():
-    """初始化数据库并创建默认管理员和团队"""
+    """Initialize database and create default admin user and team"""
     import bcrypt
     from openwandb.config import DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, DEFAULT_TEAM_NAME
 
     conn = sqlite3.connect(str(DB_PATH))
     conn.executescript(_SCHEMA)
 
-    # 创建默认团队
+    # Create default team
     try:
         conn.execute(
             "INSERT INTO teams (name, display_name, created_at) VALUES (?, ?, ?)",
@@ -205,7 +205,7 @@ def init_db():
     team = conn.execute("SELECT id FROM teams WHERE name = ?", (DEFAULT_TEAM_NAME,)).fetchone()
     team_id = team[0] if team else 1
 
-    # 创建默认管理员
+    # Create default admin
     try:
         pw_hash = bcrypt.hashpw(DEFAULT_ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
         conn.execute(
@@ -214,12 +214,12 @@ def init_db():
         )
         admin = conn.execute("SELECT id FROM users WHERE username = ?", (DEFAULT_ADMIN_USERNAME,)).fetchone()
         if admin:
-            # 管理员加入默认团队 (owner)
+            # Add admin to default team (owner)
             conn.execute(
                 "INSERT OR IGNORE INTO team_members (team_id, user_id, role, joined_at) VALUES (?, ?, 'owner', ?)",
                 (team_id, admin[0], _now_iso())
             )
-            # 创建默认 API Key
+            # Create default API Key
             raw_key = "local0000000000000000000000000000000000000000"
             key_hash = bcrypt.hashpw(raw_key.encode(), bcrypt.gensalt()).decode()
             conn.execute(
@@ -250,7 +250,7 @@ def get_db():
 
 
 # ─────────────────────────────────────────────
-# User 操作
+# User operations
 # ─────────────────────────────────────────────
 
 def create_user(username: str, password: str, display_name: str = "", email: str = "") -> Optional[dict]:
@@ -266,7 +266,7 @@ def create_user(username: str, password: str, display_name: str = "", email: str
             user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
             if user:
                 user_dict = dict(user)
-                # 自动创建个人团队
+                # Automatically create personal team
                 team_name = username
                 try:
                     conn.execute(
@@ -314,13 +314,13 @@ def get_user_by_username(username: str) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# API Key 操作
+# API Key operations
 # ─────────────────────────────────────────────
 
 def create_api_key(user_id: int, name: str = "default") -> dict:
-    """创建 API Key, 返回含明文 key (仅此一次)"""
+    """Create API Key, returns the raw key in plaintext (only this once)"""
     import bcrypt
-    raw_key = "local-" + secrets.token_hex(20)  # 46 chars, 满足 wandb >=40 要求
+    raw_key = "local-" + secrets.token_hex(20)  # 46 chars, meets wandb >=40 requirement
     key_hash = bcrypt.hashpw(raw_key.encode(), bcrypt.gensalt()).decode()
     prefix = raw_key[:8]
     now = _now_iso()
@@ -334,23 +334,23 @@ def create_api_key(user_id: int, name: str = "default") -> dict:
             (user_id, prefix)
         ).fetchone()
         result = dict(row)
-        result["raw_key"] = raw_key  # 仅在创建时返回
+        result["raw_key"] = raw_key  # Only returned at creation time
         return result
 
 
 def verify_api_key(raw_key: str) -> Optional[dict]:
-    """验证 API Key 并返回关联的用户"""
+    """Verify API Key and return the associated user"""
     import bcrypt
     prefix = raw_key[:8]
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM api_keys WHERE key_prefix = ?", (prefix,)).fetchall()
         for row in rows:
             if bcrypt.checkpw(raw_key.encode(), row["key_hash"].encode()):
-                # 更新 last_used
+                # Update last_used
                 conn.execute("UPDATE api_keys SET last_used = ? WHERE id = ?", (_now_iso(), row["id"]))
                 user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
                 return dict(user) if user else None
-    # 兼容旧默认 key
+    # Compatible with legacy default key
     if raw_key == "local0000000000000000000000000000000000000000":
         user = conn.execute("SELECT * FROM users LIMIT 1").fetchone() if False else None
         with get_db() as conn:
@@ -375,7 +375,7 @@ def delete_api_key(key_id: int, user_id: int) -> bool:
 
 
 # ─────────────────────────────────────────────
-# Team 操作
+# Team operations
 # ─────────────────────────────────────────────
 
 def create_team(name: str, display_name: str, owner_id: int) -> Optional[dict]:
@@ -472,11 +472,11 @@ def remove_team_member(team_id: int, user_id: int) -> bool:
 
 
 # ─────────────────────────────────────────────
-# 权限检查
+# Permission checks
 # ─────────────────────────────────────────────
 
 def user_can_access_project(user_id: int, project_id: int) -> bool:
-    """用户是否可以查看项目"""
+    """Check if a user can view a project"""
     with get_db() as conn:
         proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not proj:
@@ -495,7 +495,7 @@ def user_can_access_project(user_id: int, project_id: int) -> bool:
 
 
 def user_can_write_project(user_id: int, project_id: int) -> bool:
-    """用户是否可以向项目写数据"""
+    """Check if a user can write data to a project"""
     with get_db() as conn:
         proj = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         if not proj:
@@ -512,7 +512,7 @@ def user_can_write_project(user_id: int, project_id: int) -> bool:
 
 
 def user_can_access_run(user_id: int, run_id) -> bool:
-    """检查用户是否可以访问 run (支持 run_id 字符串或数据库 id 整数)"""
+    """Check if a user can access a run (supports run_id string or database id integer)"""
     with get_db() as conn:
         run = conn.execute(
             "SELECT project_id FROM runs WHERE id = ? OR run_id = ?",
@@ -524,14 +524,14 @@ def user_can_access_run(user_id: int, run_id) -> bool:
 
 
 # ─────────────────────────────────────────────
-# Project 操作 (带租户隔离)
+# Project operations (with tenant isolation)
 # ─────────────────────────────────────────────
 
 def get_or_create_project(team_name: str, project_name: str, owner_id: int = None) -> dict:
     with get_db() as conn:
         team = conn.execute("SELECT * FROM teams WHERE name = ?", (team_name,)).fetchone()
         if not team:
-            # 自动创建团队
+            # Automatically create team
             conn.execute(
                 "INSERT INTO teams (name, display_name, created_at) VALUES (?,?,?)",
                 (team_name, team_name, _now_iso())
@@ -563,7 +563,7 @@ def get_or_create_project(team_name: str, project_name: str, owner_id: int = Non
 
 
 def list_projects_for_user(user_id: int, team_id: int = None) -> list:
-    """列出用户可见的项目"""
+    """List projects visible to the user"""
     with get_db() as conn:
         if team_id:
             rows = conn.execute(
@@ -633,7 +633,7 @@ def get_project_team(project_id: int) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# Run 操作
+# Run operations
 # ─────────────────────────────────────────────
 
 def upsert_run(project_id: int, run_id: str, display_name: str = "",
@@ -809,10 +809,23 @@ def create_artifact(run_id: str, name: str, artifact_type: str = "dataset", meta
 
 def register_file(run_id: str, name: str, path: str, size: int = 0, md5: str = "") -> dict:
     with get_db() as conn:
-        conn.execute(
-            "INSERT INTO files (run_id, name, path, size, md5, created_at) VALUES (?,?,?,?,?,?)",
-            (run_id, name, path, size, md5, _now_iso())
-        )
+        # Idempotent: keep only one record per filename per run, update when new data is available
+        existing = conn.execute(
+            "SELECT id, size FROM files WHERE run_id = ? AND name = ?",
+            (run_id, name)
+        ).fetchone()
+        if existing:
+            # File already registered — only update when more complete info is available (size>0 or md5 non-empty)
+            if size > 0 or md5:
+                conn.execute(
+                    "UPDATE files SET path = ?, size = ?, md5 = ? WHERE id = ?",
+                    (path, size, md5, existing["id"])
+                )
+        else:
+            conn.execute(
+                "INSERT INTO files (run_id, name, path, size, md5, created_at) VALUES (?,?,?,?,?,?)",
+                (run_id, name, path, size, md5, _now_iso())
+            )
         row = conn.execute(
             "SELECT * FROM files WHERE run_id = ? AND name = ? ORDER BY id DESC LIMIT 1",
             (run_id, name)
@@ -826,8 +839,15 @@ def list_files(run_id: str) -> list:
         return [dict(r) for r in rows]
 
 
+def get_artifact_by_id(artifact_id: int) -> dict | None:
+    """Get a single artifact by ID"""
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM artifacts WHERE id = ?", (artifact_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def list_artifacts(run_id: str) -> list:
-    """列出运行的所有 artifact"""
+    """List all artifacts for a run"""
     with get_db() as conn:
         rows = conn.execute(
             "SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at DESC",
@@ -842,6 +862,20 @@ def list_artifacts(run_id: str) -> list:
                 d["metadata"] = {}
             result.append(d)
         return result
+
+
+def update_artifact_path(artifact_key: str, path: str, size: int = 0):
+    """Update the file path of the most recent artifact based on an upload path keyword"""
+    with get_db() as conn:
+        # Try to match the most recently created artifact (in reverse chronological order)
+        row = conn.execute(
+            "SELECT id FROM artifacts ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE artifacts SET path = ?, size = ? WHERE id = ?",
+                (path, size, row["id"])
+            )
 
 
 # ─────────────────────────────────────────────
@@ -870,7 +904,7 @@ def get_share_link(token: str) -> Optional[dict]:
                 try:
                     exp = datetime.fromisoformat(link["expires_at"].replace("Z", "+00:00"))
                     if datetime.utcnow().replace(tzinfo=exp.tzinfo) > exp:
-                        return None  # 过期
+                        return None  # Expired
                 except Exception:
                     pass
             return link

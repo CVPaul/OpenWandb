@@ -1,11 +1,11 @@
 """
-OpenWandb CLI — 服务管理命令行工具
+OpenWandb CLI — Service management CLI
 
-用法:
-    openwandb serve          # 启动服务器
-    openwandb init           # 初始化数据目录
-    openwandb demo           # 生成并运行演示脚本
-    openwandb version        # 显示版本
+Usage:
+    openwandb serve          # Start the server
+    openwandb init           # Initialize data directory
+    openwandb demo           # Generate and run demo script
+    openwandb version        # Show version
 """
 import os
 import subprocess
@@ -16,7 +16,7 @@ import click
 
 
 def _print_banner(host: str, port: int, data_dir: Path):
-    """打印启动横幅"""
+    """Print startup banner"""
     from openwandb import __version__
     click.echo(rf"""
    ___                 _    _                 _ _
@@ -50,7 +50,7 @@ def main(ctx):
 
     Run 'openwandb serve' to start the server, or 'openwandb --help' for more options.
     """
-    # 如果没有子命令, 默认执行 serve
+    # Default to serve if no subcommand specified
     if ctx.invoked_subcommand is None:
         ctx.invoke(serve)
 
@@ -66,14 +66,16 @@ def main(ctx):
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev mode)")
 @click.option("--root-path", default=None,
               help="URL path prefix for reverse proxy (e.g. /my/prefix)")
+@click.option("--base-url", default=None,
+              help="Full external URL for file uploads (e.g. https://domain.com/prefix)")
 @click.option("--db", "--db-backend", "db_backend", default=None,
               type=click.Choice(["sqlite", "postgres"], case_sensitive=False),
               help="Database backend (default: sqlite)")
 @click.option("--pg-url", default=None,
               help="PostgreSQL connection URL (e.g. postgresql://user:pass@host:5432/openwandb)")
-def serve(host, port, data_dir, log_level, reload, root_path, db_backend, pg_url):
+def serve(host, port, data_dir, log_level, reload, root_path, base_url, db_backend, pg_url):
     """Start the OpenWandb server."""
-    # 在 import config 之前设置环境变量 (config 在导入时读取)
+    # Set env vars before importing config (config reads them at import time)
     if data_dir:
         os.environ["OPENWANDB_DATA_DIR"] = str(Path(data_dir).resolve())
     if host:
@@ -84,13 +86,15 @@ def serve(host, port, data_dir, log_level, reload, root_path, db_backend, pg_url
         os.environ["OPENWANDB_LOG_LEVEL"] = log_level.upper()
     if root_path:
         os.environ["OPENWANDB_ROOT_PATH"] = root_path
+    if base_url:
+        os.environ["OPENWANDB_BASE_URL"] = base_url
     if pg_url:
         os.environ["OPENWANDB_PG_URL"] = pg_url
         os.environ["OPENWANDB_DB_BACKEND"] = "postgres"
     if db_backend:
         os.environ["OPENWANDB_DB_BACKEND"] = db_backend
 
-    # 现在导入 config (触发目录创建)
+    # Now import config (triggers directory creation)
     from openwandb.config import HOST, PORT, LOG_LEVEL, DATA_DIR, ROOT_PATH
 
     _print_banner(HOST, PORT, DATA_DIR)
@@ -192,7 +196,7 @@ def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
             "local0000000000000000000000000000000000000000"
         )
 
-    # 根据模式选择模板: 默认=纯 NumPy, --lightning=Lightning
+    # Select template based on mode: default=pure NumPy, --lightning=Lightning
     if lightning:
         demo_template_path = Path(__file__).parent / "demo_script.py"
         mode_label = "PyTorch Lightning"
@@ -202,7 +206,7 @@ def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
 
     template = demo_template_path.read_text(encoding="utf-8")
 
-    # 替换参数占位符
+    # Replace parameter placeholders
     script_content = (template
                       .replace("{server_url}", server_url)
                       .replace("{api_key}", api_key)
@@ -210,7 +214,7 @@ def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
                       .replace("{num_runs}", str(runs))
                       .replace("{epochs}", str(epochs)))
 
-    # 写出到目标文件
+    # Write to output file
     output_path = Path(output).resolve()
     output_path.write_text(script_content, encoding="utf-8")
 
@@ -236,10 +240,10 @@ def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
         click.echo()
         return
 
-    # 检查依赖 — 根据模式检查不同的包
+    # Check dependencies — different packages per mode
     missing = []
     if lightning:
-        # Lightning 模式: 需要 torch + lightning + wandb
+        # Lightning mode: requires torch + lightning + wandb
         try:
             import torch  # noqa: F401
         except ImportError:
@@ -251,7 +255,7 @@ def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
                 import pytorch_lightning  # noqa: F401
             except ImportError:
                 missing.append("lightning")
-    # 两种模式都需要 numpy 和 wandb
+    # Both modes require numpy and wandb
     try:
         import numpy  # noqa: F401
     except ImportError:
@@ -274,7 +278,7 @@ def demo(server_url, api_key, project, runs, epochs, no_run, lightning, output):
     click.echo("  Running demo...")
     click.echo()
 
-    # 执行生成的脚本 (使用当前 Python 解释器)
+    # Execute generated script (using current Python interpreter)
     result = subprocess.run(
         [sys.executable, str(output_path)],
         cwd=str(output_path.parent),

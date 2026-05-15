@@ -1,8 +1,8 @@
 """
-OpenWandb — PostgreSQL 数据库后端
-API 与 _db_sqlite.py 完全一致, 通过 database.py dispatcher 自动切换
+OpenWandb — PostgreSQL database backend
+API is fully compatible with _db_sqlite.py, automatically switched via database.py dispatcher
 
-用法:
+Usage:
     export OPENWANDB_DB_BACKEND=postgres
     export OPENWANDB_PG_URL=postgresql://user:pass@host:5432/openwandb
     openwandb serve
@@ -22,11 +22,11 @@ from openwandb.config import PG_URL, PG_POOL_MIN, PG_POOL_MAX
 
 logger = logging.getLogger("openwandb.db.postgres")
 
-# 兼容 server.py 中引用 db.DB_PATH 的日志输出
+# Compatible with server.py referencing db.DB_PATH in logs
 DB_PATH = PG_URL or "postgres://(not configured)"
 
 # ─────────────────────────────────────────────
-# 工具函数
+# Utility functions
 # ─────────────────────────────────────────────
 
 def _now_iso() -> str:
@@ -43,11 +43,11 @@ def _gen_token(n: int = 32) -> str:
 
 
 # ─────────────────────────────────────────────
-# 数据库 Schema (PostgreSQL)
+# Database Schema (PostgreSQL)
 # ─────────────────────────────────────────────
 
 _SCHEMA_PG = """
--- 用户
+-- Users
 CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,
     username        TEXT    NOT NULL UNIQUE,
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at      TEXT    NOT NULL
 );
 
--- 团队
+-- Teams
 CREATE TABLE IF NOT EXISTS teams (
     id              SERIAL PRIMARY KEY,
     name            TEXT    NOT NULL UNIQUE,
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS teams (
     created_at      TEXT    NOT NULL
 );
 
--- 团队成员
+-- Team members
 CREATE TABLE IF NOT EXISTS team_members (
     id          SERIAL PRIMARY KEY,
     team_id     INTEGER NOT NULL REFERENCES teams(id),
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     last_used   TEXT
 );
 
--- 项目
+-- Projects
 CREATE TABLE IF NOT EXISTS projects (
     id          SERIAL PRIMARY KEY,
     team_id     INTEGER NOT NULL REFERENCES teams(id),
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS projects (
     UNIQUE(team_id, name)
 );
 
--- 运行
+-- Runs
 CREATE TABLE IF NOT EXISTS runs (
     id              SERIAL PRIMARY KEY,
     project_id      INTEGER NOT NULL REFERENCES projects(id),
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS runs (
     heartbeat_at    TEXT    NOT NULL
 );
 
--- 指标
+-- Metrics
 CREATE TABLE IF NOT EXISTS metrics (
     id          SERIAL PRIMARY KEY,
     run_id      TEXT    NOT NULL,
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS metrics (
     wall_time   DOUBLE PRECISION NOT NULL
 );
 
--- 系统指标
+-- System metrics
 CREATE TABLE IF NOT EXISTS system_metrics (
     id          SERIAL PRIMARY KEY,
     run_id      TEXT    NOT NULL,
@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     created_at      TEXT    NOT NULL
 );
 
--- 文件
+-- Files
 CREATE TABLE IF NOT EXISTS files (
     id          SERIAL PRIMARY KEY,
     run_id      TEXT    NOT NULL,
@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS files (
     created_at  TEXT    NOT NULL
 );
 
--- 分享链接
+-- Share links
 CREATE TABLE IF NOT EXISTS share_links (
     id              SERIAL PRIMARY KEY,
     token           TEXT    NOT NULL UNIQUE,
@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS share_links (
     created_at      TEXT    NOT NULL
 );
 
--- 索引
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_metrics_run_key ON metrics(run_id, key);
 CREATE INDEX IF NOT EXISTS idx_metrics_run_step ON metrics(run_id, step);
 CREATE INDEX IF NOT EXISTS idx_system_metrics_run ON system_metrics(run_id);
@@ -187,7 +187,7 @@ CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
 
 
 # ─────────────────────────────────────────────
-# 连接池
+# Connection pool
 # ─────────────────────────────────────────────
 
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
@@ -203,7 +203,7 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
 
 @contextmanager
 def get_db():
-    """获取 PostgreSQL 连接 (从连接池), 自动提交/回滚"""
+    """Get a PostgreSQL connection (from connection pool), auto commit/rollback"""
     pool = _get_pool()
     conn = pool.getconn()
     conn.autocommit = False
@@ -220,22 +220,22 @@ def get_db():
 
 
 def _fetchone(cur) -> Optional[dict]:
-    """fetchone 并转为 dict (兼容 sqlite3.Row 行为)"""
+    """fetchone and convert to dict (compatible with sqlite3.Row behavior)"""
     row = cur.fetchone()
     return dict(row) if row else None
 
 
 def _fetchall(cur) -> list[dict]:
-    """fetchall 并转为 dict list"""
+    """fetchall and convert to dict list"""
     return [dict(r) for r in cur.fetchall()]
 
 
 # ─────────────────────────────────────────────
-# 初始化
+# Initialization
 # ─────────────────────────────────────────────
 
 def init_db():
-    """初始化数据库并创建默认管理员和团队"""
+    """Initialize database and create default admin user and team"""
     import bcrypt
     from openwandb.config import DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD, DEFAULT_TEAM_NAME
 
@@ -247,7 +247,7 @@ def init_db():
         cur.execute(_SCHEMA_PG)
         conn.commit()
 
-        # 创建默认团队
+        # Create default team
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
             "INSERT INTO teams (name, display_name, created_at) VALUES (%s, %s, %s) ON CONFLICT (name) DO NOTHING",
@@ -259,7 +259,7 @@ def init_db():
         team = cur.fetchone()
         team_id = team["id"] if team else 1
 
-        # 创建默认管理员
+        # Create default admin
         cur.execute("SELECT id FROM users WHERE username = %s", (DEFAULT_ADMIN_USERNAME,))
         if not cur.fetchone():
             pw_hash = bcrypt.hashpw(DEFAULT_ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
@@ -293,7 +293,7 @@ def init_db():
 
 
 # ─────────────────────────────────────────────
-# User 操作
+# User operations
 # ─────────────────────────────────────────────
 
 def create_user(username: str, password: str, display_name: str = "", email: str = "") -> Optional[dict]:
@@ -327,7 +327,7 @@ def create_user(username: str, password: str, display_name: str = "", email: str
                     user_dict["default_team_id"] = team["id"]
                 return user_dict
         except psycopg2.IntegrityError:
-            # username 已存在, 回滚当前事务以恢复连接状态
+            # Username already exists, rollback current transaction to restore connection state
             cur.connection.rollback()
             return None
     return None
@@ -356,11 +356,11 @@ def get_user_by_username(username: str) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# API Key 操作
+# API Key operations
 # ─────────────────────────────────────────────
 
 def create_api_key(user_id: int, name: str = "default") -> dict:
-    """创建 API Key, 返回含明文 key (仅此一次)"""
+    """Create API Key, returns the raw key in plaintext (only this once)"""
     import bcrypt
     raw_key = "local-" + secrets.token_hex(20)
     key_hash = bcrypt.hashpw(raw_key.encode(), bcrypt.gensalt()).decode()
@@ -377,7 +377,7 @@ def create_api_key(user_id: int, name: str = "default") -> dict:
 
 
 def verify_api_key(raw_key: str) -> Optional[dict]:
-    """验证 API Key 并返回关联的用户"""
+    """Verify API Key and return the associated user"""
     import bcrypt
     prefix = raw_key[:8]
     with get_db() as cur:
@@ -388,7 +388,7 @@ def verify_api_key(raw_key: str) -> Optional[dict]:
                 cur.execute("UPDATE api_keys SET last_used = %s WHERE id = %s", (_now_iso(), row["id"]))
                 cur.execute("SELECT * FROM users WHERE id = %s", (row["user_id"],))
                 return _fetchone(cur)
-    # 兼容旧默认 key
+    # Compatible with legacy default key
     if raw_key == "local0000000000000000000000000000000000000000":
         with get_db() as cur:
             cur.execute("SELECT * FROM users ORDER BY id LIMIT 1")
@@ -412,7 +412,7 @@ def delete_api_key(key_id: int, user_id: int) -> bool:
 
 
 # ─────────────────────────────────────────────
-# Team 操作
+# Team operations
 # ─────────────────────────────────────────────
 
 def create_team(name: str, display_name: str, owner_id: int) -> Optional[dict]:
@@ -512,7 +512,7 @@ def remove_team_member(team_id: int, user_id: int) -> bool:
 
 
 # ─────────────────────────────────────────────
-# 权限检查
+# Permission checks
 # ─────────────────────────────────────────────
 
 def user_can_access_project(user_id: int, project_id: int) -> bool:
@@ -565,7 +565,7 @@ def user_can_access_run(user_id: int, run_id) -> bool:
 
 
 # ─────────────────────────────────────────────
-# Project 操作
+# Project operations
 # ─────────────────────────────────────────────
 
 def get_or_create_project(team_name: str, project_name: str, owner_id: int = None) -> dict:
@@ -671,7 +671,7 @@ def get_project_team(project_id: int) -> Optional[dict]:
 
 
 # ─────────────────────────────────────────────
-# Run 操作
+# Run operations
 # ─────────────────────────────────────────────
 
 def upsert_run(project_id: int, run_id: str, display_name: str = "",
@@ -807,7 +807,7 @@ def get_metric_keys(run_id: str) -> list[str]:
 
 def get_latest_metrics(run_id: str) -> dict:
     with get_db() as cur:
-        # 用 DISTINCT ON 代替 SQLite 的 GROUP BY + 子查询, 更高效
+        # Use DISTINCT ON instead of SQLite's GROUP BY + subquery, more efficient
         cur.execute(
             """SELECT DISTINCT ON (key) key, value, step
                FROM metrics WHERE run_id = %s
@@ -851,10 +851,25 @@ def create_artifact(run_id: str, name: str, artifact_type: str = "dataset", meta
 
 def register_file(run_id: str, name: str, path: str, size: int = 0, md5: str = "") -> dict:
     with get_db() as cur:
+        # Idempotent: keep only one record per filename per run, update when new data is available
         cur.execute(
-            "INSERT INTO files (run_id, name, path, size, md5, created_at) VALUES (%s,%s,%s,%s,%s,%s) RETURNING *",
-            (run_id, name, path, size, md5, _now_iso())
+            "SELECT id, size FROM files WHERE run_id = %s AND name = %s",
+            (run_id, name)
         )
+        existing = _fetchone(cur)
+        if existing:
+            if size > 0 or md5:
+                cur.execute(
+                    "UPDATE files SET path = %s, size = %s, md5 = %s WHERE id = %s RETURNING *",
+                    (path, size, md5, existing["id"])
+                )
+            else:
+                cur.execute("SELECT * FROM files WHERE id = %s", (existing["id"],))
+        else:
+            cur.execute(
+                "INSERT INTO files (run_id, name, path, size, md5, created_at) VALUES (%s,%s,%s,%s,%s,%s) RETURNING *",
+                (run_id, name, path, size, md5, _now_iso())
+            )
         return _fetchone(cur)
 
 
@@ -862,6 +877,14 @@ def list_files(run_id: str) -> list:
     with get_db() as cur:
         cur.execute("SELECT * FROM files WHERE run_id = %s ORDER BY name", (run_id,))
         return _fetchall(cur)
+
+
+def get_artifact_by_id(artifact_id: int) -> dict | None:
+    """Get a single artifact by ID"""
+    with get_db() as cur:
+        cur.execute("SELECT * FROM artifacts WHERE id = %s", (artifact_id,))
+        rows = _fetchall(cur)
+        return rows[0] if rows else None
 
 
 def list_artifacts(run_id: str) -> list:
@@ -878,6 +901,18 @@ def list_artifacts(run_id: str) -> list:
                 d["metadata"] = {}
             result.append(d)
         return result
+
+
+def update_artifact_path(artifact_key: str, path: str, size: int = 0):
+    """Update the file path of the most recent artifact based on an upload path keyword"""
+    with get_db() as cur:
+        cur.execute("SELECT id FROM artifacts ORDER BY id DESC LIMIT 1")
+        row = _fetchone(cur)
+        if row:
+            cur.execute(
+                "UPDATE artifacts SET path = %s, size = %s WHERE id = %s",
+                (path, size, row["id"])
+            )
 
 
 # ─────────────────────────────────────────────
